@@ -38,13 +38,12 @@
 @section Scripts {
     <script type="text/javascript">
         $().ready(function () {
-            yepnope({
-                test: Modernizr.geolocation,
-                yep: '@Url.Content("~/Scripts/geo.js")',
-                nope: '@Url.Content("~/Scripts/geo-polyfill.js")',
-                callback: function (url, result, key) {
-                    OnNavigation();
-                }
+            var geoScript = ('geolocation' in navigator)
+                ? '@Url.Content("~/Scripts/geo.js")'
+                : '@Url.Content("~/Scripts/geo-polyfill.js")';
+
+            $.getScript(geoScript, function () {
+                OnNavigation();
             });
 
             $("#search").click(ValidateAndFindDinners);

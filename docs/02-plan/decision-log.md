@@ -165,3 +165,193 @@ degradation, not a regression, since the mobile page offered no distinct
 functionality.
 
 **Status:** Adopted.
+
+---
+
+### DL-008 — M3 verified by actually building and running the suite, not by inspection
+
+**Decision:** M3 was executed and verified in an environment with a real
+MSBuild toolchain (Visual Studio Build Tools), `nuget.exe` with live
+`nuget.org` access, and a LocalDB instance — every package upgrade,
+namespace fix, and config change in this milestone was compiled and the
+full characterization suite was run before and after, not just
+reasoned about from reading the code.
+
+**Context:** `m2-characterization-tests.md` documented that M2 had to be
+authored blind, with no .NET SDK, no NuGet access, and no way to compile
+or run the suite in-session — verification happened separately, by the
+user, in Visual Studio. That limitation did not hold for M3: this
+session had `MSBuild.exe`, `nuget.exe`, and `SqlLocalDB.exe` available
+and used them directly (baseline: 68 passed / 2 skipped, matching M2's
+documented baseline exactly; same result after every subsequent change
+in this milestone).
+
+**Reasoning:** Recording this because it changes the verification story
+for the remaining Phase 1 milestones — M4 through M6 can be built and
+tested the same way in-session, not just authored and handed off for
+manual VS verification like M2 was. Worth knowing before assuming the
+M2-era limitation still applies.
+
+**Status:** Adopted.
+
+---
+
+### DL-009 — M1's specific target versions superseded by what NuGet actually had available at execution time
+
+**Decision:** Where M1's recorded target version differed from the
+newest version actually available on `nuget.org` when M3 ran, the live
+listing won, not the number written down in
+`m1-dependency-research.md`. Three cases:
+
+- **jQuery**: M1 recorded a target of 4.0.0. The `jQuery` NuGet package
+  (as opposed to the npm/CDN distribution) tops out at **3.7.1** — no
+  4.x release exists on NuGet as of this milestone. Used 3.7.1.
+- **PagedList replacement**: M1 recorded "replace now with `X.PagedList`
+  ... current release 8.x for classic MVC/`System.Web`." By the time
+  M3 ran, `X.PagedList` had moved to a 10.x line that dropped .NET
+  Framework support entirely (netstandard2.0/net6.0/net8.0 only, no
+  net45/net46x `lib` folder). The newest version that still ships a
+  classic-framework build is **7.9.0** (net45/net461); versions 8.0.5
+  and later are netstandard2.0+-only. Used 7.9.0.
+- **Microsoft.SqlServer.Types**: M1 flagged this "upgrade in-place"
+  without naming a specific target version. Chose **14.0.1016.290**
+  (the SQL Server 2017-era release) over the newest available
+  (170.1000.7, SQL Server 2022-era) — it's the most widely-adopted
+  version in the package's install history and a smaller version jump
+  off the 10.50 baseline, given this whole dependency is superseded
+  outright by NetTopologySuite in Phase 2 regardless (per M1).
+
+**Reasoning:** M1's research is dated (checked against nuget.org in
+2026, per its own header), but "checked directly rather than assumed"
+was the standard it set for itself — the same standard applies when
+executing the plan later and reality has moved since the note was
+written. Re-verifying at execution time and taking the live answer is
+consistent with that, not a deviation from it. None of these changes
+affect the plan's Phase 1/Phase 2 boundary or any decision already
+logged.
+
+**Status:** Adopted.
+
+---
+
+### DL-010 — EF5→EF6 required source fixes beyond the package bump; done as part of M3, not treated as a behavior change
+
+**Decision:** Three fixes were required to make the app actually
+function on EntityFramework 6.5.2, beyond changing the package version.
+All three were made as part of M3 rather than logged as accepted
+regressions, because none of them change observable behavior — they
+restore the pre-upgrade behavior under the new package. The
+characterization suite's pass/skip counts are identical before and
+after (68 passed / 2 skipped both times).
+
+- **`System.Data.Spatial.DbGeography` → `System.Data.Entity.Spatial.DbGeography`.**
+  EF6 moved the spatial types out of the in-box `System.Data.Entity`
+  assembly and into the `EntityFramework` NuGet package itself, under a
+  new namespace. The app's EF5-era `using System.Data.Spatial;` left
+  `DbGeography` on `Dinner.Location` pointing at a type EF6's model
+  builder no longer recognizes as a spatial primitive — it tried to map
+  it as a keyless entity instead, and `DbModelBuilder.Build` threw a
+  `ModelValidationException` on every DB-backed test. Fixed in
+  `Dinner.cs`, `SearchController.cs`, `DbGeographyModelBinder.cs`, both
+  `DbGeography.cshtml` templates, and the test project's
+  `TestDatabase.cs`.
+- **`EntityState` namespace ambiguity.** `DinnersController.cs` has both
+  `using System.Data;` (the old `EntityState`) and
+  `using System.Data.Entity;` (EF6's own `EntityState`) — EF6
+  introducing its own copy of that enum made the unqualified reference
+  in `Edit()` ambiguous. Fully qualified it as
+  `System.Data.Entity.EntityState.Modified`.
+- **`Microsoft.SqlServer.Types` native binary loading.** The 10.50-era
+  package auto-registered its native spatial DLL; the 14.0-era package
+  does not — it ships `nativeBinaries\{x86,x64}\SqlServerSpatial140.dll`
+  plus a `SqlServerTypes.Utilities.LoadNativeAssemblies(...)` helper
+  (`content\SqlServerTypes\Loader.cs`) that the consuming app must call
+  explicitly before touching any `DbGeography`/`SqlGeography` value.
+  This is normally wired up by the package's `install.ps1` inside
+  Visual Studio's NuGet integration; `nuget.exe` run from the command
+  line (as this session did) does not execute that script, so it had to
+  be done by hand: `Loader.cs` added to `src/SqlServerTypes/`, the
+  native DLLs copied into `SqlServerTypes\x86\` and `SqlServerTypes\x64\`
+  under both the app and test projects (each process resolves the path
+  relative to its own base directory), and
+  `SqlServerTypes.Utilities.LoadNativeAssemblies(...)` called once from
+  `Global.asax.cs` `Application_Start` (app) and once from
+  `TestDatabaseFixture`'s constructor (tests) — before either touches
+  the database.
+
+**Reasoning:** These aren't optional cleanup — without all three, the
+app doesn't run and the DB-backed half of the characterization suite
+fails outright. They restore identical behavior to the EF5 baseline
+under EF6, which is exactly what "upgrade in-place" is supposed to mean
+for this dependency. None of it is a deferred decision or an accepted
+regression, so none of it needed the "update the test deliberately"
+treatment DL-004 reserves for actual behavior changes.
+
+**Status:** Adopted.
+
+---
+
+### DL-011 — MVC5 `ProjectTypeGuid` restored after MSBuild silently dropped it
+
+**Decision:** `src/NerdDinner.csproj`'s `ProjectTypeGuids` now includes
+`{E53F8FEA-EAE0-44A6-8774-FFD645390401}` (the ASP.NET MVC 5 project-type
+marker) in place of the MVC 4 marker
+(`{E3E379DF-F4C6-4180-9B81-6769533ABE47}`) it had before.
+
+**Context:** During M3's build verification, MSBuild rewrote the
+`.csproj` on disk mid-build (adding empty `Use64BitIISExpress` /
+`UseGlobalApplicationHostFile` elements) and, in the process, silently
+dropped the MVC4 GUID entirely rather than updating it — leaving the
+project typed as a bare web application with no MVC marker at all. This
+wasn't a change this session made intentionally; it surfaced by
+diffing the file after a build. Left alone, it doesn't break compiling
+or the test suite (Visual Studio scaffolding features like "Add View"
+are the only thing that read this GUID), but it's exactly the marker
+that Microsoft's own MVC4-to-MVC5 upgrade guide says to swap, so it's
+worth setting correctly rather than leaving it silently absent.
+
+**Reasoning:** Recorded because it's a real, if minor, gotcha for
+anyone repeating this upgrade path with newer MSBuild tooling: don't
+assume the `.csproj` is inert just because MSBuild's job is to read it,
+not write it.
+
+**Status:** Adopted.
+
+---
+
+### DL-012 — `Views/Web.config` needed the same version bump as the root config, missed on the first pass
+
+**Decision:** `src/Views/Web.config` now pins `System.Web.WebPages.Razor`
+at `Version=3.0.0.0` (was `2.0.0.0`) and `System.Web.Mvc` at
+`Version=5.3.0.0` (was `4.0.0.0`) in its `configSections` declarations
+and `<pages>`/`<system.web.webPages.razor>` type strings.
+
+**Context:** Found only after the user launched the app in Visual
+Studio and hit a parser error at the browser:
+`Could not load file or assembly 'System.Web.WebPages.Razor,
+Version=2.0.0.0, ...'. The located assembly's manifest definition does
+not match the assembly reference.` `Views/Web.config` is a separate
+config file from the site's root `Web.config`, read specifically by the
+Razor view engine, and it hardcodes strong-name version numbers
+directly in five places rather than going through the
+`<runtime><assemblyBinding>` redirects that fixed the equivalent problem
+in the root config during M3. Missed entirely on the first pass because
+nothing in the automated safety net exercises it: the characterization
+suite calls controller actions directly and inspects the returned
+`ViewResult`/model without ever asking ASP.NET to actually parse and
+compile a `.cshtml` file, which is the only code path that reads this
+file.
+
+**Reasoning:** This is a known, explicit step in Microsoft's own
+MVC4-to-MVC5 upgrade guide (update `Views/Web.config` alongside the
+project's package references) that got missed here specifically because
+nothing runs the real ASP.NET pipeline in this session — a genuine blind
+spot in characterization-test coverage for this kind of change, not a
+new decision. Recording it as a concrete instance of "assessment/testing
+by exercising code finds different things than assessment by reading
+it" (the same theme M2 called out for the `ws.geonames.org` retirement),
+and as a reminder that config-file version pins outside the root
+`Web.config` need the same audit as package references whenever MVC (or
+WebPages/Razor) moves major version again.
+
+**Status:** Adopted.

@@ -6,7 +6,7 @@ using System.Linq;
 using System.Web;
 using System.Web.Mvc;
 using NerdDinner.Models;
-using PagedList;
+using X.PagedList;
 
 namespace NerdDinner.Controllers
 {
@@ -108,7 +108,7 @@ namespace NerdDinner.Controllers
 
             if (ModelState.IsValid)
             {
-                db.Entry(dinner).State = EntityState.Modified;
+                db.Entry(dinner).State = System.Data.Entity.EntityState.Modified;
                 db.SaveChanges();
                 return RedirectToAction("Index");
             }

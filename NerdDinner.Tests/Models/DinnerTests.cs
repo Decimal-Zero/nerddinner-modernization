@@ -89,7 +89,7 @@ namespace NerdDinner.Tests.Models
             Assert.False(dinner.IsUserRegistered("carol"));
         }
 
-        [Fact(Skip = "Throws NRE")]
+        [Fact]
         public void IsUserRegistered_ThrowsNullReferenceException_WhenRSVPsIsNull()
         {
             // Characterizing a real gap: RSVPs is not initialized by the

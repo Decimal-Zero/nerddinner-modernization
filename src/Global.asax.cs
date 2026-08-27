@@ -17,6 +17,8 @@ namespace NerdDinner
     {
         protected void Application_Start()
         {
+            SqlServerTypes.Utilities.LoadNativeAssemblies(Server.MapPath("~/"));
+
             AreaRegistration.RegisterAllAreas();
 
             WebApiConfig.Register(GlobalConfiguration.Configuration);

@@ -1,6 +1,6 @@
 using System;
 using System.Data.Entity;
-using System.Data.Spatial;
+using System.Data.Entity.Spatial;
 using System.Linq;
 using NerdDinner.Models;
 using Xunit;
@@ -18,6 +18,13 @@ namespace NerdDinner.Tests.TestSupport
     {
         public TestDatabaseFixture()
         {
+            // EF6's DbGeography (SqlGeography under the hood) needs the
+            // native SqlServerSpatial DLL loaded explicitly -- it's no
+            // longer auto-registered the way the old 10.50 SqlServerTypes
+            // package was. Must happen before anything touches spatial
+            // data below.
+            SqlServerTypes.Utilities.LoadNativeAssemblies(AppDomain.CurrentDomain.BaseDirectory);
+
             // Database.SetInitializer + a throwaway context access forces
             // EF to create the schema against the LocalDB connection string
             // in App.config. Deliberately does NOT reuse the app's own

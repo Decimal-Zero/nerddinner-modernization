@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Data.Spatial;
+using System.Data.Entity.Spatial;
 using System.Linq;
 using System.Web;
 using System.Web.Mvc;

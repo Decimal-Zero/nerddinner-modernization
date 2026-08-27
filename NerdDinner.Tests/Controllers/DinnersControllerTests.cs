@@ -3,7 +3,7 @@ using System.Web.Mvc;
 using NerdDinner.Controllers;
 using NerdDinner.Models;
 using NerdDinner.Tests.TestSupport;
-using PagedList;
+using X.PagedList;
 using Xunit;
 
 namespace NerdDinner.Tests.Controllers
@@ -160,7 +160,7 @@ namespace NerdDinner.Tests.Controllers
             Assert.Equal("InvalidOwner", result.ViewName);
         }
 
-        [Fact(Skip = "Throws NRE")]
+        [Fact]
         public void DeleteConfirmed_ThrowsNullReferenceException_ForNonexistentId()
         {
             // Real, pre-existing bug, characterized rather than fixed here:
