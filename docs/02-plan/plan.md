@@ -117,6 +117,12 @@ Fixes the critical flags called out in the assessment.
 - `Web.config`: `compilation debug="false"` for release configuration.
 - `Web.config`: `customErrors` set to `On` or `RemoteOnly`, not `Off`.
 - `GeolocationService` calls use HTTPS, not plain HTTP.
+- `GeolocationService.PlaceOrZipToLatLong`'s hardcoded `ws.geonames.org`
+  endpoint is updated to `api.geonames.org` — the `ws` subdomain has been
+  retired (found while verifying M2's test suite; see
+  `m2-characterization-tests.md`). Confirm the response format is
+  unchanged between the two endpoints before assuming this is a
+  drop-in swap.
 - The Bing Maps script reference in `_Layout.cshtml` (`http://ecn.dev.virtualearth.net/...`)
   is updated to HTTPS — same insecure-transport pattern as
   `GeolocationService`, found during the M1/DL-007 view review.
