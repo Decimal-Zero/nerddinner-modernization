@@ -25,7 +25,6 @@ namespace NerdDinner
             FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
             RouteConfig.RegisterRoutes(RouteTable.Routes);
             BundleConfig.RegisterBundles(BundleTable.Bundles);
-            AuthConfig.RegisterAuth();
 
             ModelBinderProviders.BinderProviders.Add(new EFModelBinderProvider());
 

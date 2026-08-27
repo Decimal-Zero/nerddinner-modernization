@@ -24,15 +24,18 @@ if anything here conflicts with them, they win.
   `docs/02-plan/m1-dependency-research.md` for the full audit and
   per-package disposition (upgrade in-place / replace / remove).
 - **M2 (characterization test suite): complete and verified.**
-  `NerdDinner.Tests` (xUnit + Moq) passes in Visual Studio against
-  LocalDB, with two tests intentionally skipped (see below). See
+  `NerdDinner.Tests` (xUnit + Moq) passes against LocalDB. See
   `docs/02-plan/m2-characterization-tests.md`.
 - **M3 (framework and dependency upgrade to .NET Framework 4.8.x):
-  complete and verified.** Built and the full characterization suite run
-  in-session (68 passed / 2 skipped, unchanged from M2's baseline) — see
-  `decision-log.md` DL-008 through DL-011 for what that took and what
-  was decided along the way.
-- **M4 (auth stack) is next.** Not started.
+  complete and verified.** See `decision-log.md` DL-008 through DL-012
+  for what that took and what was decided along the way.
+- **M4 (auth stack): complete and verified.** SimpleMembership +
+  DotNetOpenAuth replaced with ASP.NET Identity 2.2.4 + OWIN 4.2.3, per
+  M1's determination. See `decision-log.md` DL-014.
+- **M5 (security and configuration hardening) is next.** Not started.
+- Full suite as of M4: 76 passed, 0 skipped (`Category!=Integration`
+  filter — the GeoNames Integration tests need your own locally-stored
+  username, per DL-013, and aren't part of the default fast run).
 
 Read `docs/01-assessment/assessment.md` for the full scored assessment
 this plan is built on, including the six-category "replace/rebuild

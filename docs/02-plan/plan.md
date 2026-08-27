@@ -105,9 +105,18 @@ M5.
 - Login, registration, and external OAuth login flows pass their
   characterization tests (updated only where the auth mechanism change
   legitimately alters observable behavior, e.g. session cookie format).
+  **Done for login/registration mechanics** — `AccountControllerIdentityTests`
+  exercises `ApplicationUserManager` directly against LocalDB (see
+  decision-log.md DL-014). External OAuth login flows remain
+  uncharacterized at the controller level: they need a live OWIN
+  context (`HttpContext.GetOwinContext()`), same class of limitation
+  `AccountControllerTests` already had pre-M4 for a different reason —
+  a real, documented gap carried forward, not a new one.
 - No hardcoded secrets introduced; OAuth provider keys remain externalized
   to config, consistent with the assessment's finding that this was
-  already handled correctly.
+  already handled correctly. **Done** — `googleClientId`/`googleClientSecret`
+  added alongside the existing three provider key pairs, all blank by
+  default (DL-014).
 
 ### M5 — Security and configuration hardening
 

@@ -411,3 +411,163 @@ mechanism never needed `dotnet user-secrets init` or a project-level
 relevant now.
 
 **Status:** Adopted.
+
+---
+
+### DL-014 — Auth stack replaced: SimpleMembership + DotNetOpenAuth → ASP.NET Identity 2.2.4 + OWIN 4.2.3
+
+**Decision:** M4 executed the replacement path M1 determined (resolved
+by DL-006): `WebSecurity`/`OAuthWebSecurity`/DotNetOpenAuth are gone.
+`AccountController` now runs on `Microsoft.AspNet.Identity.Core` +
+`.EntityFramework` + `.Owin` 2.2.4, with `Microsoft.Owin.Host.SystemWeb`
++ `Microsoft.Owin.Security.{Cookies,MicrosoftAccount,Twitter,Facebook,Google}`
+4.2.3 for cookie auth and the four external login providers — the exact
+versions M1 predicted, still current when M4 ran (unlike the version
+drift DL-009 had to work around in M3).
+
+**What changed, file by file:**
+- `Models/IdentityModels.cs` (new): `ApplicationUser : IdentityUser`,
+  `ApplicationDbContext : IdentityDbContext<ApplicationUser>` against
+  the existing `DefaultConnection` connection string — the same
+  database SimpleMembership's `UserProfile` table used to live in, now
+  holding Identity's standard `AspNetUsers`/`AspNetRoles`/etc. schema
+  instead. No migration of old `UserProfile` rows: there's no real user
+  data in this practice project (DL-005), so a fresh schema is strictly
+  simpler than reverse-engineering a migration for data that doesn't
+  exist.
+- `App_Start/IdentityConfig.cs` (new): `ApplicationUserManager` /
+  `ApplicationSignInManager`, with `UserValidator`/`PasswordValidator`
+  explicitly configured to match SimpleMembership's old, looser policy
+  (no character-class requirements, length ≥ 6 only, any user name) —
+  Identity's defaults are stricter, and matching the old policy
+  explicitly avoids silently tightening registration rules as a side
+  effect of this milestone.
+- `App_Start/Startup.cs` + `Startup.Auth.cs` (new): standard OWIN
+  bootstrap (`[assembly: OwinStartup]`), cookie auth configuration, and
+  the four external-provider registrations — each still conditional on
+  its config keys being non-empty, same externalized-secrets pattern as
+  the old `AuthConfig.cs` it replaces (deleted).
+- `Controllers/AccountController.cs`: fully rewritten against
+  `UserManager`/`SignInManager` instead of `WebSecurity`/
+  `OAuthWebSecurity`, but every action name, route, and view model shape
+  (`LoginModel`, `RegisterModel`, `LocalPasswordModel`,
+  `RegisterExternalLoginModel`, `ExternalLogin`) is unchanged — existing
+  views needed no changes except `_ExternalLoginsListPartial.cshtml`
+  (see below). `[InitializeSimpleMembership]` and its attribute class
+  (`Filters/InitializeSimpleMembershipAttribute.cs`, deleted) are gone;
+  Identity's own `Database.SetInitializer` handles first-run schema
+  creation the same way SimpleMembership's initializer did.
+- `Views/Account/_ExternalLoginsListPartial.cshtml`: the one view
+  requiring a real change. It modeled itself on
+  `AuthenticationClientData` (DotNetOpenAuth's helper type, gone); now
+  uses OWIN's `AuthenticationDescription` (`AuthenticationType` in place
+  of `ProviderName`, `Caption` in place of `DisplayName`). Every other
+  Account view compiles and behaves unchanged.
+- `Models/AccountModels.cs`: `UsersContext`/`UserProfile`
+  (SimpleMembership-specific) removed; the view models are untouched.
+- `Web.config`: `<authentication mode="Forms">` → `mode="None"` — OWIN's
+  cookie middleware (configured in `Startup.Auth.cs`) replaces Forms
+  Authentication's role entirely, and leaving both active risks the two
+  competing over 401 handling and the login redirect. The
+  `dotNetOpenAuth` config section, its `<dotNetOpenAuth>` element, and
+  the now-unnecessary `<uri>` IDN/RFC3986 section (needed only for
+  OpenID/OAuth unicode domain handling) are removed. Added
+  `googleClientId`/`googleClientSecret` app settings (see below).
+
+**Observable behavior changes** (per M4's acceptance criteria, each
+justified rather than silently absorbed):
+- **Google login now requires configuration.** The old
+  `OAuthWebSecurity.RegisterGoogleClient()` used a keyless OpenID 2.0
+  flow; OWIN's Google provider is OAuth 2.0-only and requires a
+  registered `ClientId`/`ClientSecret`, same as the other three
+  providers. This is a smaller change than it sounds: Google retired
+  OpenID 2.0 in 2015, so the old keyless flow was already dead in
+  practice, not a working feature being removed.
+- **Session cookie changes identity/format.** OWIN's
+  `ApplicationCookie` replaces the ASP.NET Forms Authentication ticket
+  cookie SimpleMembership rode on top of — different cookie name,
+  different payload format. Anyone with an existing session is signed
+  out once; there's no session data worth preserving across that
+  boundary in this practice project.
+- **Registration failure messages are Identity's own strings**, not the
+  old `MembershipCreateStatus`-keyed messages from
+  `ErrorCodeToString()` (removed) — e.g. Identity's own duplicate-name
+  and validation error text, surfaced via `IdentityResult.Errors`
+  instead. Still error text describing the same underlying conditions
+  (duplicate name, invalid password), just not byte-for-byte identical
+  wording.
+
+**Testing:** `AccountControllerTests.cs`'s own comment (written in M2)
+promised that the observable authentication contract would get
+characterized once M4 landed a real seam. It does now:
+`AccountControllerIdentityTests` exercises `ApplicationUserManager`
+directly against a dedicated `NerdDinnerIdentityTests` LocalDB database
+(`IdentityTestDatabaseFixture`, mirroring `TestDatabaseFixture`'s
+pattern but kept as a separate database from `NerdDinnerContext`'s
+Dinners/RSVPs data so the two fixtures' drop/create lifecycles can't
+interfere with each other) — registration success, duplicate-name
+rejection, password-length rejection, and correct/incorrect-password
+login all pass. Action-level flows that need a live OWIN context
+(`ExternalLogin` challenge/callback, `Manage`, `Disassociate`) remain
+untested at the controller level, same limitation `AccountControllerTests`
+already had pre-M4 for a different reason (ambient static state instead
+of ambient OWIN context) — still a real, documented gap, not a
+regression from where M2 left it.
+
+**Status:** Adopted.
+
+---
+
+### DL-015 — `DbGeographyModelBinder` array-index bug fixed (pre-existing since the 2012 baseline, unrelated to M3/M4)
+
+**Decision:** `DbGeographyModelBinder.BindModel` now checks that the
+posted "lat,long" value actually splits into two non-empty parts before
+building a `DbGeography` from it, returning `null` otherwise. Previously
+it unconditionally indexed `latLongStr[1]`, which threw
+`IndexOutOfRangeException` for any posted value without a comma.
+
+**Context:** Found by the user manually testing Create Dinner in the
+browser after M4 — reasonable to suspect at first, since M3 touched
+this exact file's `DbGeography` namespace. Checked git history to be
+sure: the only change ever made to this file is the one-line
+`System.Data.Spatial` → `System.Data.Entity.Spatial` namespace fix from
+M3 (DL-010), a type substitution with zero logic change. The array-index
+bug is byte-for-byte what shipped in the original 2012 baseline import
+(commit `bf314f5`) — confirmed by diffing against it directly, not
+assumed.
+
+**Root cause:** `Views/Shared/EditorTemplates/DbGeography.cshtml` posts
+`Location=""` whenever nothing has been geocoded yet (its `else`
+branch, hit on every fresh Create). The field only gets populated by
+`NerdDinner._callbackForLocation` in `NerdDinner.js`, which depends on
+a successful Bing Maps geocoding round trip keyed by `BingMapsKey` — an
+app setting that ships blank in the checked-in `Web.config`, same
+"externalized but not configured" pattern as `ipInfoDbKey` and (until
+DL-013) `GeoNames:UserName`. Without a real key, `Location` never gets
+set, and `"".Split(',')` yields a one-element array.
+
+**Reasoning:** `Dinner.Location` has no `[Required]` attribute — the
+model already permits a dinner with no location (`SearchController`'s
+characterized `JsonDinnerFromDinner` NRE-on-null-Location bug depends on
+exactly this being legal). Returning `null` for an empty/malformed
+posted value is consistent with that existing contract, not a new
+relaxation of it. Chose to fix immediately rather than defer to M5, per
+explicit direction — this is the same "no fallback / no validation
+before touching untrusted input" pattern the original assessment
+already flagged for `GeolocationService` (Category 7), just in a
+different file, so fixing it doesn't expand scope conceptually even
+though `DbGeographyModelBinder.cs` wasn't named in that finding.
+
+**Testing:** `NerdDinner.Tests/ModelBinders/DbGeographyModelBinderTests.cs`
+(new) characterizes all four cases directly against the binder: empty
+posted value, field not posted at all, malformed value with no comma
+(all → `null`), and a well-formed pair (→ correct `DbGeography`). Also
+fixed, in the same pass: `TestSupport/IdentityTestDatabase.cs` (added
+during M4, DL-014) was never actually added to
+`NerdDinner.Tests.csproj` — it silently didn't compile, and the
+Identity tests only passed because EF6's default
+`CreateDatabaseIfNotExists` initializer stepped in regardless. Both the
+new binder test file and the missing M4 file are now correctly wired
+into the project.
+
+**Status:** Adopted.
