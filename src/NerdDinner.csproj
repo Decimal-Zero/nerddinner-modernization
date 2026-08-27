@@ -239,6 +239,17 @@
     <Compile Include="Helpers\CountryList.cs" />
     <Compile Include="Helpers\StringExtensions.cs" />
     <Compile Include="ModelBinders\DbGeographyModelBinder.cs" />
+    <Compile Include="Migrations\Configuration.cs" />
+    <Compile Include="Migrations\202608272110081_InitialCreate.cs" />
+    <Compile Include="Migrations\202608272110081_InitialCreate.Designer.cs">
+      <DependentUpon>202608272110081_InitialCreate.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\202608272110081_InitialCreate.resx">
+      <DependentUpon>202608272110081_InitialCreate.cs</DependentUpon>
+      <LogicalName>NerdDinner.Migrations.InitialCreate.resources</LogicalName>
+    </EmbeddedResource>
     <Compile Include="Models\AccountModels.cs" />
     <Compile Include="Models\Dinner.cs" />
     <Compile Include="Models\IdentityModels.cs" />
@@ -386,6 +397,7 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="App_Data\" />
+    <None Include="App_Data\.gitkeep" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="packages.config" />

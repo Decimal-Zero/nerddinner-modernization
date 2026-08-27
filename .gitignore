@@ -2,6 +2,14 @@
 .vs/
 
 #################
+## LocalDB (M6 -- schema/data now come from EF6 Migrations, not
+## checked-in database files; see docs/02-plan/decision-log.md DL-018)
+#################
+*.mdf
+*.ldf
+*.ndf
+
+#################
 ## Eclipse
 #################
 

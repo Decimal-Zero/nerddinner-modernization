@@ -668,3 +668,73 @@ point at third-party sites that may not even serve HTTPS. Not part of
 this pass.
 
 **Status:** Adopted.
+
+---
+
+### DL-018 — M6: checked-in `.mdf`/`.ldf` files removed, EF6 Migrations reproduces schema and seed data instead
+
+**Decision:** The four checked-in LocalDB files under `src/App_Data/`
+(`aspnet-NerdDinner-*.mdf`/`.ldf`, `NerdDinnerContext-*.mdf`/`.ldf`) are
+deleted from the working tree (no history rewrite of the baseline
+import commit — they're still recoverable from `bf314f5` if ever
+needed). Both `Web.config` connection strings (`DefaultConnection`,
+`NerdDinnerContext`) switched from `AttachDbFilename=|DataDirectory|\...`
+to named LocalDB databases (`Initial Catalog=NerdDinner.Identity` /
+`NerdDinner`) that get created fresh on first use. `.gitignore` gained
+`*.mdf`/`*.ldf`/`*.ndf` so these can't silently come back.
+
+**Schema/seed mechanism:**
+- `NerdDinnerContext` (Dinners/RSVPs): real EF6 Migrations —
+  `Migrations/Configuration.cs` + a scaffolded `InitialCreate` migration
+  (`Migrations/202608272110081_InitialCreate.cs`), wired up via
+  `Database.SetInitializer(new MigrateDatabaseToLatestVersion<NerdDinnerContext, Configuration>())`
+  in `Global.asax.cs` `Application_Start`. `Configuration.Seed()`
+  populates two clearly-fictional placeholder dinners (Seattle,
+  Portland) — explicitly **not** an attempt to reproduce the deleted
+  `.mdf`'s actual contents, which was itself flagged in the original
+  assessment (Category 4) as ad hoc, unreproducible data no test or
+  fixture should depend on.
+- `ApplicationDbContext` (Identity, `DefaultConnection`): left on its
+  existing automatic `CreateDatabaseIfNotExists` initializer from M4 —
+  no formal migrations, since Identity's schema needs no seed data and
+  a fresh `AspNetUsers`/etc. schema is all that's required.
+
+**How the `InitialCreate` migration was actually generated:** `Add-Migration`
+is a PowerShell cmdlet with no CLI equivalent, unusable outside a VS
+Package Manager Console session. Scaffolded it programmatically instead,
+via the same public API the cmdlet wraps
+(`System.Data.Entity.Migrations.Design.MigrationScaffolder`), from a
+throwaway console harness referencing the built `NerdDinner.dll` (`Configuration`
+temporarily made `public` for the harness to construct it, reverted to
+`internal` immediately after — the real app only ever needs `internal`
+access, same assembly). Chose this over hand-writing the migration
+because `DbGeography` columns have SQL-Server-specific spatial DDL
+conventions (`c.Geography()`) not worth risking a hand-written mistake
+on when the real scaffolder produces a materially different,
+provider-correct result automatically.
+
+**Verified, not just written:** a second throwaway harness pointed a
+fresh, disposable LocalDB catalog (`NerdDinnerMigrationVerify`) at the
+real `MigrateDatabaseToLatestVersion<NerdDinnerContext, Configuration>()`
+initializer end to end — confirmed the migration creates the schema
+(including a working `DbGeography` column: seeded coordinates round-tripped
+correctly), `Seed()` populates exactly the two placeholder dinners, and
+calling `Database.Initialize` a second time (simulating a later app
+start against an already-migrated database) is a no-op rather than a
+duplicate-seed or migration-history error. Both throwaway harnesses were
+deleted after use; nothing from them is checked in.
+
+**Not covered by the automated test suite:** `NerdDinner.Tests`'s own
+`TestDatabaseFixture` manages `NerdDinnerContext` with its own
+`DropCreateDatabaseAlways` initializer (a deliberate M2 choice — tests
+need a wipe-and-reseed-per-run database, not migration history), so it
+never exercises the `Migrations` mechanism at all. Adding a permanent
+xUnit test for the migration path was considered and rejected:
+`Database.SetInitializer<NerdDinnerContext>` is static, per-AppDomain
+global state, so a test that set the Migrations initializer would
+silently override whichever initializer runs for every other
+`NerdDinnerContext` test in the same process depending on execution
+order — a real risk of flaky, order-dependent test pollution for a
+verification that a one-time manual run already covers thoroughly.
+
+**Status:** Adopted.

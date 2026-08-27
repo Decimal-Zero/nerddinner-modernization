@@ -41,11 +41,18 @@ if anything here conflicts with them, they win.
   `decision-log.md` DL-016 (includes a real gotcha: GeoNames' HTTPS
   endpoint is a different hostname, `secure.geonames.org`, not just a
   protocol change on `api.geonames.org`).
-- **M6 (data layer cleanup) is next.** Not started.
-- Full suite as of M5: 80 passed, 0 skipped (`Category!=Integration`
-  filter — the GeoNames/ipinfodb Integration tests need your own
-  locally-stored GeoNames username, per DL-013, and aren't part of the
-  default fast run).
+- **M6 (data layer cleanup): complete and verified.** Checked-in
+  `.mdf`/`.ldf` files removed; `NerdDinnerContext`'s schema and seed
+  data now come from EF6 Migrations (`src/Migrations/`), applied via
+  `MigrateDatabaseToLatestVersion` against a named LocalDB database
+  instead of an attached file. See `decision-log.md` DL-018.
+- **Phase 1 exit checkpoint is next** — re-score assessment Categories
+  1, 5, 7, and 8 against the Phase-1-complete codebase (`plan.md`).
+  Phase 1's milestones (M1–M6) are otherwise all complete.
+- Full suite: 80 passed, 0 skipped (`Category!=Integration` filter —
+  the GeoNames/ipinfodb Integration tests need your own locally-stored
+  GeoNames username, per DL-013, and aren't part of the default fast
+  run).
 
 Read `docs/01-assessment/assessment.md` for the full scored assessment
 this plan is built on, including the six-category "replace/rebuild

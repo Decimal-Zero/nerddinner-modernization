@@ -151,14 +151,19 @@ Fixes the critical flags called out in the assessment.
 
 ### M6 — Data layer cleanup
 
+**Status: complete and verified.** See `decision-log.md` DL-018.
+
 **Acceptance criteria:**
 - The checked-in `.mdf`/`.ldf` binary database files are removed from
   the repository (from the working tree going forward — no history
-  rewrite of the baseline import commit).
+  rewrite of the baseline import commit). **Done.**
 - A migration/seed-script mechanism (EF6 Migrations) reproduces the
-  schema and any needed sample data.
+  schema and any needed sample data. **Done** — `Migrations/Configuration.cs`
+  + a scaffolded `InitialCreate` migration, verified end to end against
+  a disposable LocalDB database (schema, `DbGeography` column, and seed
+  data all confirmed working).
 - `.gitignore` updated to prevent local database files from being
-  re-committed.
+  re-committed. **Done** — `*.mdf`/`*.ldf`/`*.ndf`.
 
 ### Phase 1 exit checkpoint
 
