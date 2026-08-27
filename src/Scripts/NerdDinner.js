@@ -63,7 +63,7 @@ NerdDinner._renderDinners = function (dinners) {
 NerdDinner.FindAddressOnMap = function (where) {
     var script = document.createElement("script");
     script.setAttribute("type", "text/javascript");
-    script.setAttribute("src", "http://dev.virtualearth.net/REST/v1/Locations?query=" + encodeURI(where) + "&output=json&jsonp=NerdDinner._callbackForLocation&key=" + NerdDinner.BingMapsKey);
+    script.setAttribute("src", "https://dev.virtualearth.net/REST/v1/Locations?query=" + encodeURI(where) + "&output=json&jsonp=NerdDinner._callbackForLocation&key=" + NerdDinner.BingMapsKey);
     document.body.appendChild(script);
 };
 NerdDinner._ZoomMap = function(result) {
@@ -101,7 +101,7 @@ NerdDinner._callbackForLocation = function (result) {
 NerdDinner.FindDinnersGivenLocation = function (where) {
     var script = document.createElement("script");
     script.setAttribute("type", "text/javascript");
-    script.setAttribute("src", "http://dev.virtualearth.net/REST/v1/Locations?query=" + encodeURI(where) + "&output=json&jsonp=NerdDinner._ZoomMap&key=" + NerdDinner.BingMapsKey);
+    script.setAttribute("src", "https://dev.virtualearth.net/REST/v1/Locations?query=" + encodeURI(where) + "&output=json&jsonp=NerdDinner._ZoomMap&key=" + NerdDinner.BingMapsKey);
     document.body.appendChild(script);
 
     $.get("/api/Search?location=" + where, {}, NerdDinner._renderDinners, "json");
@@ -124,7 +124,7 @@ NerdDinner.getLocationResults = function (locations) {
     }
 };
 NerdDinner.getCurrentLocationByIpAddress = function () {
-    var requestUrl = "http://api.ipinfodb.com/v3/ip-city/?format=json&callback=?&key=" + this.ipInfoDbKey;
+    var requestUrl = "https://api.ipinfodb.com/v3/ip-city/?format=json&callback=?&key=" + this.ipInfoDbKey;
 
     $.getJSON(requestUrl,
         function (data) {
@@ -135,7 +135,7 @@ NerdDinner.getCurrentLocationByIpAddress = function () {
         });
 };
 NerdDinner.getCurrentLocationByLatLong = function (latitude, longitude) {
-    var requestUrl = 'http://dev.virtualearth.net/REST/v1/Locations/' + latitude + ',' + longitude + '?key=' + NerdDinner.BingMapsKey + '&jsonp=?';
+    var requestUrl = 'https://dev.virtualearth.net/REST/v1/Locations/' + latitude + ',' + longitude + '?key=' + NerdDinner.BingMapsKey + '&jsonp=?';
     $.getJSON(requestUrl,
         function (result) {
             if (result.resourceSets[0].estimatedTotal > 0) {

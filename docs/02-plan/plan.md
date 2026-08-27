@@ -122,10 +122,16 @@ M5.
 
 Fixes the critical flags called out in the assessment.
 
+**Status: complete and verified.** See `decision-log.md` DL-016.
+
 **Acceptance criteria:**
 - `Web.config`: `compilation debug="false"` for release configuration.
+  **Done** — already handled by the pre-existing (unmodified since the
+  2012 baseline) `Web.Release.config` transform; confirmed correct.
 - `Web.config`: `customErrors` set to `On` or `RemoteOnly`, not `Off`.
-- `GeolocationService` calls use HTTPS, not plain HTTP.
+  **Done** — set to `RemoteOnly`.
+- `GeolocationService` calls use HTTPS, not plain HTTP. **Done** — see
+  DL-016 for the `secure.geonames.org` hostname gotcha found doing this.
 - `GeolocationService.PlaceOrZipToLatLong`'s hardcoded `ws.geonames.org`
   endpoint is updated to `api.geonames.org` — the `ws` subdomain has been
   retired (found while verifying M2's test suite; see
@@ -135,12 +141,13 @@ Fixes the critical flags called out in the assessment.
   user-secrets store rather than checked in (decision-log.md DL-013).
 - The Bing Maps script reference in `_Layout.cshtml` (`http://ecn.dev.virtualearth.net/...`)
   is updated to HTTPS — same insecure-transport pattern as
-  `GeolocationService`, found during the M1/DL-007 view review.
-- The hardcoded fallback IP literal is removed.
+  `GeolocationService`, found during the M1/DL-007 view review. **Done.**
+- The hardcoded fallback IP literal is removed. **Done.**
 - `GeolocationService` has basic error handling around external API
   failures (no longer relies on `.First()` throwing an unhandled
   exception) — behavior change here is expected and should be reflected
   in updated characterization tests, not treated as a regression.
+  **Done** — see DL-016 for the updated test.
 
 ### M6 — Data layer cleanup
 

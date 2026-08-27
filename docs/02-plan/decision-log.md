@@ -571,3 +571,100 @@ new binder test file and the missing M4 file are now correctly wired
 into the project.
 
 **Status:** Adopted.
+
+---
+
+### DL-016 — M5 security/config hardening: HTTPS everywhere, no more silent failures in `GeolocationService`
+
+**Decision:** All of M5's acceptance criteria landed together:
+
+- `Web.config`: `<customErrors mode="Off">` → `mode="RemoteOnly"`.
+  `compilation debug="false"` for Release was already handled by the
+  pre-existing (unmodified since the 2012 baseline) `Web.Release.config`
+  transform (`RemoveAttributes(debug)`, which defaults `debug` to
+  `false` when absent) — confirmed present and correct, nothing to add.
+- `GeolocationService.PlaceOrZipToLatLong`: geonames.org call moved to
+  HTTPS. `GeolocationService.HostIpToPlaceName`: ipinfodb.com call moved
+  to HTTPS.
+- `_Layout.cshtml`'s Bing Maps `<script>` tag moved to HTTPS.
+- The hardcoded fallback IP literal (`"71.117.141.83"`, substituted for
+  `127.0.0.1` in `HostIpToPlaceName`) is removed outright.
+- Both `GeolocationService` methods now wrap their external HTTP call in
+  try/catch and return `null` on any failure, instead of letting
+  `XDocument.Load`/`.First()` throw unhandled.
+
+**A real, non-obvious finding while doing the HTTPS switch:**
+`api.geonames.org` does not serve a valid certificate for itself on
+port 443 — `curl`/schannel fail with `SEC_E_WRONG_PRINCIPAL` (SNI/cert
+hostname mismatch). Checked what certificate is actually being served:
+`CN=secure.geonames.org`. GeoNames requires a **different hostname**
+for HTTPS than for HTTP, not just a protocol change on the same host —
+confirmed by successfully querying `https://secure.geonames.org/postalCodeSearch?...`
+directly. `PlaceOrZipToLatLong` now points at `secure.geonames.org`,
+not `api.geonames.org`, for its HTTPS request. This is the same shape
+of gotcha as the `ws.geonames.org` → `api.geonames.org` retirement M2
+found (DL-009/M3): don't assume a same-host protocol swap works, verify
+it directly. The Bing Maps and ipinfodb.com HTTPS switches, by contrast,
+needed no hostname change — checked each directly rather than assuming
+they'd all behave the same way.
+
+**Verified against the live APIs**, not just reasoned about:
+`PlaceOrZipToLatLong_ReturnsCoordinates_ForKnownValidZip` (real
+coordinates, over HTTPS, with the tester's own registered GeoNames
+username per DL-013), `PlaceOrZipToLatLong_ReturnsNull_WhenNoResultsFound`,
+and the updated `HostIpToPlaceName_ReturnsNull_WhenApiKeyIsBlank` all
+pass against the live, HTTPS endpoints.
+
+**Deliberate behavior change, per plan.md's own instruction for this
+milestone:** `HostIpToPlaceName` used to propagate whatever exception a
+missing `ipInfoDbKey` produced straight to the caller; it now returns
+`null`, matching `PlaceOrZipToLatLong`'s existing "no match" contract.
+`GeolocationServiceTests.HostIpToPlaceName_ThrowsUnhandledException_WhenApiKeyIsBlank`
+is renamed to `..._ReturnsNull_WhenApiKeyIsBlank` and its assertion
+updated accordingly, with a comment pointing at this entry rather than
+silently changing what it checks.
+
+**Originally left out of scope, addressed immediately after per explicit
+direction:** `NerdDinner.js` made several of its own plain-HTTP calls to
+`dev.virtualearth.net`'s REST geocoding endpoints and `api.ipinfodb.com`
+— the same insecure-transport pattern as everything above, but not
+named in M5's acceptance criteria (which specifically scoped the Bing
+Maps fix to the `_Layout.cshtml` script tag). See DL-017 for the fix.
+
+**Status:** Adopted.
+
+---
+
+### DL-017 — `NerdDinner.js`'s remaining plain-HTTP calls moved to HTTPS
+
+**Decision:** All four plain-HTTP URLs in `Scripts/NerdDinner.js` are
+now HTTPS: the two `dev.virtualearth.net/REST/v1/Locations` forward-geocode
+calls (`FindAddressOnMap`, `FindDinnersGivenLocation`), the reverse-geocode
+call (`getCurrentLocationByLatLong`), and the client-side ipinfodb.com
+call (`getCurrentLocationByIpAddress`).
+
+**Context:** DL-016 explicitly left these out of M5's scope, since
+plan.md's acceptance criteria named only the `_Layout.cshtml` Bing Maps
+`<script>` tag. Brought back in immediately afterward per explicit
+direction — "security hardening is what M5 is about" — rather than
+waiting for a later milestone.
+
+**Verified before changing, same discipline as DL-016:**
+`https://dev.virtualearth.net/REST/v1/Locations` (both the query and
+`{lat},{lng}` forms) returns `401` over HTTPS with a placeholder key —
+a real TLS handshake and server-side processing, not a connection-level
+failure, confirming no hostname change is needed here (unlike GeoNames).
+`https://api.ipinfodb.com` was already confirmed working in DL-016.
+
+**Deliberately left alone:** the social-share and attribution links in
+`Views/Dinners/Details.cshtml`, `WebSlice.cshtml`, `Home/About.cshtml`,
+and `_Layout.cshtml`'s footer (Twitter/Facebook/Google Reader share
+intents, credit links to contributors' personal sites, the defunct
+`nerddinner.codeplex.com`) also use plain `http://`. These are
+outbound links a user chooses to click, not application-initiated
+requests carrying API keys or user data — a different risk category
+from a script-tag/XHR call the app makes automatically, and several
+point at third-party sites that may not even serve HTTPS. Not part of
+this pass.
+
+**Status:** Adopted.

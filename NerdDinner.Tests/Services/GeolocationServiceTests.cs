@@ -59,23 +59,19 @@ namespace NerdDinner.Tests.Services
 
         [Fact]
         [Trait("Category", "Integration")]
-        public void HostIpToPlaceName_ThrowsUnhandledException_WhenApiKeyIsBlank()
+        public void HostIpToPlaceName_ReturnsNull_WhenApiKeyIsBlank()
         {
-            // Characterizing real, current (bad) behavior per DL-004: with
-            // no ipInfoDbKey configured (the checked-in Web.config ships
-            // this blank, per the assessment's Category 5 finding that
-            // secrets are at least correctly externalized), the ipinfodb.com
-            // call either fails outright or returns a response this method
-            // doesn't handle gracefully -- there is no try/catch and no
-            // null-check around `.First()`. Whatever the specific exception
-            // type turns out to be against the live API today, this method
-            // is EXPECTED to throw without a valid key, and that's the
-            // point being documented: not a "correct" error message, just
-            // that failure here is currently unhandled and propagates
-            // straight to the caller (SearchController, if this were ever
-            // wired to it -- currently it isn't called from any controller
-            // in this codebase).
-            Assert.ThrowsAny<Exception>(() => GeolocationService.HostIpToPlaceName("127.0.0.1"));
+            // Deliberate M5 behavior change, not a regression -- see
+            // decision-log.md DL-016 and plan.md M5. Before M5,
+            // HostIpToPlaceName had no try/catch and no null-check around
+            // `.First()`, so a blank ipInfoDbKey (the checked-in Web.config
+            // ships this blank) propagated whatever exception the failed
+            // ipinfodb.com call produced straight to the caller. M5 wraps
+            // the external call and returns null on any failure instead,
+            // matching PlaceOrZipToLatLong's existing "no match" contract.
+            var result = GeolocationService.HostIpToPlaceName("127.0.0.1");
+
+            Assert.Null(result);
         }
     }
 }

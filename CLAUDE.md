@@ -31,11 +31,21 @@ if anything here conflicts with them, they win.
   for what that took and what was decided along the way.
 - **M4 (auth stack): complete and verified.** SimpleMembership +
   DotNetOpenAuth replaced with ASP.NET Identity 2.2.4 + OWIN 4.2.3, per
-  M1's determination. See `decision-log.md` DL-014.
-- **M5 (security and configuration hardening) is next.** Not started.
-- Full suite as of M4: 76 passed, 0 skipped (`Category!=Integration`
-  filter — the GeoNames Integration tests need your own locally-stored
-  username, per DL-013, and aren't part of the default fast run).
+  M1's determination. See `decision-log.md` DL-014. A pre-existing
+  `DbGeographyModelBinder` crash (unrelated to M3/M4, dating to the 2012
+  baseline) found by manual testing after this milestone was fixed
+  separately — see DL-015.
+- **M5 (security and configuration hardening): complete and verified.**
+  `Web.config` hardening, HTTPS for `GeolocationService` and the Bing
+  Maps script, fallback-IP removal, and graceful failure handling — see
+  `decision-log.md` DL-016 (includes a real gotcha: GeoNames' HTTPS
+  endpoint is a different hostname, `secure.geonames.org`, not just a
+  protocol change on `api.geonames.org`).
+- **M6 (data layer cleanup) is next.** Not started.
+- Full suite as of M5: 80 passed, 0 skipped (`Category!=Integration`
+  filter — the GeoNames/ipinfodb Integration tests need your own
+  locally-stored GeoNames username, per DL-013, and aren't part of the
+  default fast run).
 
 Read `docs/01-assessment/assessment.md` for the full scored assessment
 this plan is built on, including the six-category "replace/rebuild

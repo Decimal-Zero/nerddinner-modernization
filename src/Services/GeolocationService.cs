@@ -15,61 +15,77 @@ namespace NerdDinner.Services
 
             var secret = Uri.EscapeDataString(ConfigurationManager.AppSettings["GeoNames:UserName"]);
 
-            string url = "http://api.geonames.org/postalCodeSearch?{0}={1}&maxRows=1&style=SHORT&username={2}";
+            // HTTPS on this API is served from a different hostname than
+            // HTTP -- api.geonames.org's TLS certificate is issued for
+            // secure.geonames.org, so switching only the scheme on the
+            // same host fails with a certificate/SNI mismatch. Confirmed
+            // directly rather than assumed (see decision-log.md DL-016).
+            string url = "https://secure.geonames.org/postalCodeSearch?{0}={1}&maxRows=1&style=SHORT&username={2}";
             url = String.Format(url, placeOrZip.IsNumeric() ? "postalcode" : "placename", placeOrZip, secret);
 
-            var result = cache[placeOrZip] as XDocument;
-            if (result == null)
+            try
             {
-                result = XDocument.Load(url);
-                cache.Add(placeOrZip, result,
-                    new CacheItemPolicy() { SlidingExpiration = TimeSpan.FromDays(1) });
-            }
+                var result = cache[placeOrZip] as XDocument;
+                if (result == null)
+                {
+                    result = XDocument.Load(url);
+                    cache.Add(placeOrZip, result,
+                        new CacheItemPolicy() { SlidingExpiration = TimeSpan.FromDays(1) });
+                }
 
-            if (result.Descendants("code").Any())
-            {
-                var ll = (from x in result.Descendants("code")
-                          select new LatLong
-                          {
-                              Lat = (float)x.Element("lat"),
-                              Long = (float)x.Element("lng")
-                          })
-                           .First();
-                return ll;
+                if (result.Descendants("code").Any())
+                {
+                    var ll = (from x in result.Descendants("code")
+                              select new LatLong
+                              {
+                                  Lat = (float)x.Element("lat"),
+                                  Long = (float)x.Element("lng")
+                              })
+                               .First();
+                    return ll;
+                }
+                return null;
             }
-            return null;
+            catch (Exception)
+            {
+                // The free-tier geocoding API this depends on has no SLA --
+                // rate limits, outages, or a malformed/unexpected response
+                // are all real possibilities (this is the exact risk the
+                // assessment's Category 7 finding called out). Treat any
+                // failure here the same as "no match found" rather than
+                // letting it take down the caller.
+                return null;
+            }
         }
 
         public static LocationInfo HostIpToPlaceName(string ip)
         {
-            if (ip == "127.0.0.1")
-            {
-                ip = "71.117.141.83";
-                //return string.Empty;
-            }
-
-            string apiKey = System.Configuration.ConfigurationManager.AppSettings["ipInfoDbKey"];
-            string url = "http://api.ipinfodb.com/v3/ip-city/?ip={0}&key=" + apiKey;
-            //string url = "http://ipinfodb.com/ip_query.php?ip={0}&timezone=false";
+            string apiKey = ConfigurationManager.AppSettings["ipInfoDbKey"];
+            string url = "https://api.ipinfodb.com/v3/ip-city/?ip={0}&key=" + apiKey;
             url = String.Format(url, ip);
 
-            var result = XDocument.Load(url);
+            try
+            {
+                var result = XDocument.Load(url);
 
-            var location = (from x in result.Descendants("Response")
-                            select new LocationInfo
+                return (from x in result.Descendants("Response")
+                        select new LocationInfo
+                        {
+                            City = (string)x.Element("City"),
+                            RegionName = (string)x.Element("RegionName"),
+                            Country = (string)x.Element("CountryName"),
+                            ZipPostalCode = (string)x.Element("CountryName"),
+                            Position = new LatLong
                             {
-                                City = (string)x.Element("City"),
-                                RegionName = (string)x.Element("RegionName"),
-                                Country = (string)x.Element("CountryName"),
-                                ZipPostalCode = (string)x.Element("CountryName"),
-                                Position = new LatLong
-                                {
-                                    Lat = (float)x.Element("Latitude"),
-                                    Long = (float)x.Element("Longitude")
-                                }
-                            }).First();
-
-            return location;
+                                Lat = (float)x.Element("Latitude"),
+                                Long = (float)x.Element("Longitude")
+                            }
+                        }).FirstOrDefault();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
     }
 
