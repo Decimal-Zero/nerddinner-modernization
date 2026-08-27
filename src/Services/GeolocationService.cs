@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Configuration;
 using System.Linq;
 using System.Runtime.Caching;
 using System.Xml.Linq;
@@ -12,8 +13,10 @@ namespace NerdDinner.Services
         {
             ObjectCache cache = MemoryCache.Default;
 
-            string url = "http://ws.geonames.org/postalCodeSearch?{0}={1}&maxRows=1&style=SHORT";
-            url = String.Format(url, placeOrZip.IsNumeric() ? "postalcode" : "placename", placeOrZip);
+            var secret = Uri.EscapeDataString(ConfigurationManager.AppSettings["GeoNames:UserName"]);
+
+            string url = "http://api.geonames.org/postalCodeSearch?{0}={1}&maxRows=1&style=SHORT&username={2}";
+            url = String.Format(url, placeOrZip.IsNumeric() ? "postalcode" : "placename", placeOrZip, secret);
 
             var result = cache[placeOrZip] as XDocument;
             if (result == null)

@@ -89,9 +89,13 @@ through DL-003.
   issue" and "Documented gaps" sections of `m2-characterization-tests.md`
   before assuming something is undertested by accident (e.g.
   `AccountController`'s SimpleMembership-dependent flows, deliberately
-  deferred to M4; `GeolocationService`'s two `[Fact(Skip = ...)]` tests,
-  blocked on the `ws.geonames.org` → `api.geonames.org` fix tracked in
-  M5).
+  deferred to M4). `GeolocationService`'s two GeoNames tests were
+  previously skipped pending the `ws.geonames.org` → `api.geonames.org`
+  fix — that swap is done and confirmed drop-in, GeoNames' added
+  username requirement is wired to the local user-secrets store (see
+  `decision-log.md` DL-013), and both tests now run and pass against the
+  live API (still `Category=Integration`, so still excluded from the
+  default fast run).
 
 ## Build and test
 

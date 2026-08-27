@@ -4,10 +4,11 @@ Establishes the safety net against the application's **original,
 unmodified baseline behavior** — before M3's framework upgrade touches
 anything. See `decision-log.md` DL-004 for why this ordering matters.
 
-**Status: verified.** Built and run in Visual Studio against LocalDB.
-All tests pass except two, deliberately skipped — see "Known issue found
-during verification" below. Two real problems surfaced during the build
-process itself before that point:
+**Status: verified.** Built and run against LocalDB. All tests pass,
+including the two GeoNames tests that were skipped at first — see
+"Known issue found during verification" below for how that got
+resolved (during M3, not M2 itself). Two real problems surfaced during
+the build process itself before that point:
 
 1. An invalid XML comment (a double-dash inside `<!-- -->`) in
    `NerdDinner.Tests.csproj` failed the project load entirely. Fixed;
@@ -20,17 +21,17 @@ Both are good evidence for the case study's larger point: authoring
 tests carefully isn't the same as verifying them, and assessment-by-reading
 doesn't catch everything assessment-by-running does.
 
-## Known issue found during verification: `ws.geonames.org` retired
+## Known issue found during verification: `ws.geonames.org` retired (resolved during M3)
 
-`GeolocationService.PlaceOrZipToLatLong` hardcodes
+`GeolocationService.PlaceOrZipToLatLong` originally hardcoded
 `http://ws.geonames.org/postalCodeSearch?...`. That subdomain is no
 longer in service; the replacement is `api.geonames.org`. The two tests
 exercising this path (`PlaceOrZipToLatLong_ReturnsCoordinates_ForKnownValidZip`,
-`PlaceOrZipToLatLong_ReturnsNull_WhenNoResultsFound`) are marked
-`[Fact(Skip = "...")]` rather than deleted or left failing, with the
-reason and fix pointer inline in the attribute.
+`PlaceOrZipToLatLong_ReturnsNull_WhenNoResultsFound`) were marked
+`[Fact(Skip = "...")]` at the time this note was first written, rather
+than deleted or left failing.
 
-This is worth calling out beyond "one more bug list item": the original
+This was worth calling out beyond "one more bug list item": the original
 assessment's Category 7 finding was, verbatim, that `GeolocationService`
 has *"no fallback, retry, or circuit breaker if either free third-party
 geocoding API is unavailable or rate-limits."* That finding was based on
@@ -39,13 +40,21 @@ actually going away during the course of this engagement — a concrete
 demonstration of why "no fallback" was flagged as a real risk rather than
 a theoretical one.
 
-**Fix tracked in `plan.md` M5** (folded into the existing GeolocationService
-security-hardening work rather than opened as a separate milestone).
-Before treating the endpoint swap as a drop-in fix, confirm
-`api.geonames.org`'s response format matches `ws.geonames.org`'s closely
-enough that the existing `Descendants("code")`/`Element("lat")`/`Element("lng")`
-parsing still works — geonames.org's own migration notes should confirm
-this, but it shouldn't be assumed.
+**Resolution:** the endpoint swap turned out to be exactly the drop-in
+replacement hoped for — `api.geonames.org`'s response format matches
+`ws.geonames.org`'s closely enough that the existing
+`Descendants("code")`/`Element("lat")`/`Element("lng")` parsing needed no
+changes. That swap is reflected in `plan.md` M5's acceptance criteria as
+already satisfied, ahead of the rest of that milestone. A second,
+unrelated issue surfaced once the endpoint actually responded instead of
+failing to resolve: `api.geonames.org` requires a registered username on
+every request, a policy GeoNames added after this engagement's M1
+dependency research was written. That's wired up via a local
+user-secrets store, not checked into the repo — see `decision-log.md`
+DL-013 for the mechanism. Both tests now run unskipped and pass against
+the live API (still tagged `Category=Integration`, so still excluded
+from the default fast run — set your own GeoNames username locally per
+DL-013 before running them).
 
 ## Sandbox limitation and how verification actually happened
 

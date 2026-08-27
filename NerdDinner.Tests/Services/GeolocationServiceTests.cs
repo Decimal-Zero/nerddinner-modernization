@@ -34,7 +34,7 @@ namespace NerdDinner.Tests.Services
     /// </summary>
     public class GeolocationServiceTests
     {
-        [Fact(Skip = "Domain no longer valid.")]
+        [Fact]
         [Trait("Category", "Integration")]
         public void PlaceOrZipToLatLong_ReturnsCoordinates_ForKnownValidZip()
         {
@@ -43,7 +43,7 @@ namespace NerdDinner.Tests.Services
             Assert.NotNull(result);
         }
 
-        [Fact(Skip = "Domain no longer valid.")]
+        [Fact]
         [Trait("Category", "Integration")]
         public void PlaceOrZipToLatLong_ReturnsNull_WhenNoResultsFound()
         {

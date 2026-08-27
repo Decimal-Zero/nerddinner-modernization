@@ -355,3 +355,59 @@ and as a reminder that config-file version pins outside the root
 WebPages/Razor) moves major version again.
 
 **Status:** Adopted.
+
+---
+
+### DL-013 — GeoNames username sourced from the local user-secrets store via `Microsoft.Configuration.ConfigurationBuilders.UserSecrets`
+
+**Decision:** `GeolocationService.PlaceOrZipToLatLong` reads its
+required GeoNames username from `ConfigurationManager.AppSettings["GeoNames:UserName"]`,
+same as every other externalized setting in this app
+(`ipInfoDbKey`, `BingMapsKey`, etc.). The value itself is never checked
+into the repo: `src/Web.config`'s `<appSettings>` declares
+`configBuilders="Secrets"`, wired to a `Microsoft.Configuration.ConfigurationBuilders.UserSecretsConfigBuilder`
+(`Microsoft.Configuration.ConfigurationBuilders.Base` +
+`.UserSecrets`, both 3.0.0) pointed at a `userSecretsId`
+(`4c9de86e-4e70-4bd0-9d80-43532a0c4284`). At runtime, that builder reads
+`%APPDATA%\Microsoft\UserSecrets\{that-id}\secrets.json` and merges any
+matching keys into `AppSettings` transparently, before application code
+ever sees it — `GeolocationService` doesn't know or care where the value
+came from. `NerdDinner.Tests/App.config` got the identical
+`configBuilders`/`userSecretsId` wiring (plus the two
+`Microsoft.Configuration.ConfigurationBuilders.*` package references)
+so the Integration-tagged `GeolocationServiceTests` can pick up the same
+locally-stored secret rather than fail with an unhelpful
+`ArgumentNullException` from `Uri.EscapeDataString(null)`.
+
+**Supersedes:** an earlier version of this decision (logged, then
+removed from this file during further work rather than left standing)
+had `GeolocationService` calling a hand-rolled `Helpers/UserSecrets.cs`
+reader instead — a ~20-line class that opened and parsed the same
+`secrets.json` file directly with Newtonsoft.Json. Replaced because the
+config-builder approach is the standard first-party mechanism for
+exactly this (Microsoft ships it for precisely "read user-secrets into
+classic `ConfigurationManager`-based apps"), and it means
+`GeolocationService` keeps using the same `ConfigurationManager.AppSettings`
+pattern as the rest of the codebase instead of a one-off custom
+lookup path that only this one setting used.
+
+**A gotcha that carries over from the superseded approach:** `dotnet
+user-secrets set`/`list`/`remove` still cannot load `NerdDinner.csproj`
+directly (`Could not load the MSBuild project ...`) since it's a
+classic, non-SDK-style project file — this is unrelated to which
+in-app mechanism reads the resulting file, so it applies here too. Use
+the `--id <guid>` form, which talks to the secrets file directly and
+skips project resolution entirely:
+
+```
+dotnet user-secrets set "GeoNames:UserName" "<your-username>" --id 4c9de86e-4e70-4bd0-9d80-43532a0c4284
+```
+
+One difference from the superseded approach worth noting: because the
+config-builder reads the `userSecretsId` directly out of `Web.config`/
+`App.config` rather than from a `<UserSecretsId>` MSBuild property, this
+mechanism never needed `dotnet user-secrets init` or a project-level
+`<UserSecretsId>` at all — only `set`/`list`/`remove` with `--id` are
+relevant now.
+
+**Status:** Adopted.
