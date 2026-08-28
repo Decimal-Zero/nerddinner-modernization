@@ -167,6 +167,15 @@ Fixes the critical flags called out in the assessment.
 
 ### Phase 1 exit checkpoint
 
+**Status: complete.** See `docs/03-outcome/phase-1-exit-checkpoint.md`
+for the full before/after scoring. Summary: Category 1 (Platform
+Currency) 1.2 → 2.6, Category 5 (Security) 2.6 → 4.2, Category 7
+(Dependencies) 1.8 → 3.2, Category 8 (Testing) 1.0 → 2.33 — every
+re-scored category moved out of "replace/rebuild candidate," with one
+explicitly-named residual finding (Glimpse, still installed and live,
+never assigned to any of M1–M6's actual acceptance criteria despite
+M1 disposing of it as "remove entirely").
+
 Before Phase 2 begins: re-run the assessment's Categories 1, 5, 7, and 8
 (Platform Currency, Security, Dependencies, Testing) against the
 Phase-1-complete codebase. Document the before/after scores in
@@ -235,6 +244,14 @@ Targets: `Home`, `Search`.
 - All routes are served by the ASP.NET Core app.
 - The reverse proxy and legacy Framework app are removed from the
   running system.
+- Glimpse (`Glimpse`, `Glimpse.AspNet`, `Glimpse.Mvc4`) is gone along
+  with it — unmaintained since ~2014, disposed of as "remove entirely"
+  back in M1, but never assigned to any Phase 1 milestone's actual
+  acceptance criteria and so never actually removed. Flagged as a named
+  residual finding in the Phase 1 exit checkpoint
+  (`docs/03-outcome/phase-1-exit-checkpoint.md`); called out explicitly
+  here rather than left to happen implicitly when the legacy Framework
+  app is deleted, so it can't quietly get missed a second time.
 - Full characterization suite passes against the final, sole application.
 
 ---

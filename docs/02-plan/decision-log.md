@@ -738,3 +738,24 @@ order — a real risk of flaky, order-dependent test pollution for a
 verification that a one-time manual run already covers thoroughly.
 
 **Status:** Adopted.
+
+---
+
+### DL-019 — Glimpse removal explicitly assigned to M11, not left implicit
+
+**Decision:** `plan.md` M11 (Decommission legacy app) now names Glimpse
+removal explicitly in its acceptance criteria, rather than leaving it
+to happen implicitly when the legacy Framework app is deleted wholesale.
+
+**Context:** The Phase 1 exit checkpoint
+(`docs/03-outcome/phase-1-exit-checkpoint.md`) flagged Glimpse as a
+residual finding: M1 disposed of it as "remove entirely" back when
+dependencies were first researched, but that disposition was never
+actually assigned to any Phase 1 milestone's acceptance criteria, so it
+never got removed — the exact "flagged once, then quietly dropped"
+failure mode this entry exists to prevent from happening a second time.
+It would technically disappear on its own once M11 deletes the legacy
+app entirely, but leaving it implicit is how it got missed the first
+time.
+
+**Status:** Adopted.

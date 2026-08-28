@@ -46,9 +46,12 @@ if anything here conflicts with them, they win.
   data now come from EF6 Migrations (`src/Migrations/`), applied via
   `MigrateDatabaseToLatestVersion` against a named LocalDB database
   instead of an attached file. See `decision-log.md` DL-018.
-- **Phase 1 exit checkpoint is next** — re-score assessment Categories
-  1, 5, 7, and 8 against the Phase-1-complete codebase (`plan.md`).
-  Phase 1's milestones (M1–M6) are otherwise all complete.
+- **Phase 1 exit checkpoint: complete.** See
+  `docs/03-outcome/phase-1-exit-checkpoint.md` — Categories 1/5/7/8 all
+  moved out of "replace/rebuild candidate," with one named residual
+  (Glimpse, still live, never actually removed despite M1 flagging it).
+  **Phase 1 (M1–M6) is fully complete.** Phase 2 (M7: reverse proxy
+  scaffold) is next, whenever that's wanted — see `plan.md`.
 - Full suite: 80 passed, 0 skipped (`Category!=Integration` filter —
   the GeoNames/ipinfodb Integration tests need your own locally-stored
   GeoNames username, per DL-013, and aren't part of the default fast
