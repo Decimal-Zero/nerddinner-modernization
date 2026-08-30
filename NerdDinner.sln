@@ -11,6 +11,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src-core", "src-core", "{20
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NerdDinner.Proxy", "src-core\NerdDinner.Proxy\NerdDinner.Proxy.csproj", "{770373A9-6411-4939-8EA1-675E58F144DC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NerdDinner.Proxy.Tests", "src-core\NerdDinner.Proxy.Tests\NerdDinner.Proxy.Tests.csproj", "{5E78D804-429C-42F9-A7AD-2B674110927E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -57,12 +59,25 @@ Global
 		{770373A9-6411-4939-8EA1-675E58F144DC}.Release|x64.Build.0 = Release|Any CPU
 		{770373A9-6411-4939-8EA1-675E58F144DC}.Release|x86.ActiveCfg = Release|Any CPU
 		{770373A9-6411-4939-8EA1-675E58F144DC}.Release|x86.Build.0 = Release|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Debug|x64.Build.0 = Debug|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Debug|x86.Build.0 = Debug|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Release|x64.ActiveCfg = Release|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Release|x64.Build.0 = Release|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Release|x86.ActiveCfg = Release|Any CPU
+		{5E78D804-429C-42F9-A7AD-2B674110927E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{770373A9-6411-4939-8EA1-675E58F144DC} = {20B3D188-1D40-B6DB-5EFF-20E1C75EFE6A}
+		{5E78D804-429C-42F9-A7AD-2B674110927E} = {20B3D188-1D40-B6DB-5EFF-20E1C75EFE6A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {CE857FB8-A084-44DC-B342-775EDA9A21C8}

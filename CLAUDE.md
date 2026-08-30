@@ -56,8 +56,17 @@ if anything here conflicts with them, they win.
   alongside the legacy app; a catch-all route forwards every request to
   the legacy app, with only a diagnostic `/_proxy/health` endpoint
   handled locally. Verified live (both apps run, proxy forwards
-  correctly), not just built — see `decision-log.md` DL-020. M8
-  (migrate `Home`/`Search`) is next.
+  correctly), not just built — see `decision-log.md` DL-020.
+- **M8 (migrate `Home`): complete and verified.** Narrowed from the
+  original "`Home`, `Search`" scope — `Search` moved to M9, it's a
+  data-layer migration, not a routing one (DL-021). `HomeController` +
+  views ported into `NerdDinner.Proxy`, YARP catch-all given explicit
+  low priority (`"Order": 1000`) after a real bug where it was silently
+  swallowing every request including literal paths (DL-022). New
+  `NerdDinner.Proxy.Tests` project (`Category=Integration`, needs the
+  legacy app running on `localhost:10581`) verifies real HTTP routing
+  through the proxy — 4/4 passing. M9 (migrate Dinners, RSVP, and
+  Search) is next — see `plan.md`.
 - Full suite: 80 passed, 0 skipped (`Category!=Integration` filter —
   the GeoNames/ipinfodb Integration tests need your own locally-stored
   GeoNames username, per DL-013, and aren't part of the default fast

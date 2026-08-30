@@ -802,3 +802,125 @@ same repo and solution, consistent with DL-003's two-separate-processes
 approach.
 
 **Status:** Adopted.
+
+---
+
+### DL-021 — M8 narrowed to `Home` only; `Search` moved to M9
+
+**Decision:** `plan.md`'s M8 ("Migrate stateless/read-only routes") now
+targets `Home` only. `Search` moves into M9, renamed "Migrate Dinners,
+RSVP, and Search (CRUD + spatial data)".
+
+**Context:** Starting M8's implementation surfaced a real gap in the
+original milestone split: `plan.md` grouped `Home` and `Search` together
+as "stateless/read-only," but `SearchController` isn't stateless in the
+sense that matters here — it's a Web API controller (`ApiController`)
+that queries `Dinner`/`RSVP` directly via `NerdDinnerContext`, including
+a `DbGeography.Distance` spatial query (`FindByLocation`). That's
+exactly the data-access concern M9 already owns and names explicitly in
+its acceptance criteria ("EF Core data access replaces EF6;
+`Dinner.Location` uses a NetTopologySuite-based spatial type in place of
+`DbGeography`"). `Home`, by contrast, is genuinely stateless — no
+database access at all, just a static message and an About page.
+
+**Alternatives considered:**
+1. Pull the EF Core + NetTopologySuite migration forward into M8, scoped
+   to what `Search` needs (read-only queries), leaving M9 to add
+   `Dinners`/`RSVP` write operations on an already-proven data layer.
+2. Have the new `Search` controller shape/route correctly but internally
+   call the legacy app's existing `api/Search` endpoint under the hood,
+   deferring the real EF Core migration to M9.
+3. (Chosen) Narrow M8 to `Home` only; move `Search` into M9 alongside
+   `Dinners`/`RSVP`.
+
+**Reasoning:** Option 1 works technically but splits the "introduce EF
+Core + NetTopologySuite" decision across two milestones for no reason
+other than the original grouping being by HTTP verb shape
+(read-only/stateless) rather than by actual architectural concern
+(data access technology). Option 2 avoids that but ships a throwaway
+shim in M8 that gets deleted at M9 and doesn't prove the new app's own
+data access works — worse verification value for no real benefit. Option
+3 fixes the grouping at the source: `Home` truly has no data-layer
+dependency and can land independently; `Search`'s only meaningful
+migration work *is* the data layer, so it belongs with the milestone
+that already does that work for `Dinners`/`RSVP`, verified in the same
+pass rather than twice.
+
+**Status:** Adopted.
+
+---
+
+### DL-022 — M8: `Home` ported to `NerdDinner.Proxy`; real proxy-level integration tests added
+
+**Decision:** `HomeController` and its two views (`Index`, `About`) are
+now implemented for real inside `src-core/NerdDinner.Proxy`, using
+ASP.NET Core MVC conventions (Razor views, tag helpers where the target
+controller exists in the new app, plain `href`s where it doesn't yet).
+`Program.cs` registers `AddControllersWithViews()` and an explicit
+conventional route constrained to `controller=Home` only, so no other
+controller name can match it. Static assets it needs (`Site.css`, the
+`Images` referenced by `Site.css`/the views, `favicon.ico`, `jquery`,
+`knockout`, `NerdDinner.js`, `geo.js`/`geo-polyfill.js`) are copied
+as-is into `wwwroot`, unchanged from `src/`.
+
+**A real bug found and fixed while verifying this live, not just
+built:** the first working version had *every* request — including
+literal paths like `/Home/About` — silently forwarded to the legacy app
+by YARP, never reaching the new `Home` controller at all. Caught only by
+actually running both apps and diffing response markers (script
+filenames, image casing, the footer version string), not by reading the
+config. Root cause: YARP's config-loaded catch-all route
+(`/{**catch-all}`) and the MVC conventional route both default to
+`Order = 0`; ASP.NET Core's endpoint matcher groups candidates by
+`Order` before applying template-specificity precedence, and with both
+routes in the same `Order` group, the catch-all's literal
+always-matches nature won every request instead of losing on
+specificity to more literal templates the way an in-process-only MVC
+route table would have. Fixed by giving the YARP route an explicit
+`"Order": 1000` in `appsettings.json`'s `ReverseProxy:Routes:legacy-catchall`,
+forcing the matcher to exhaust the (default-`Order`-0) MVC routes first
+and fall back to YARP only when nothing else matches. Worth remembering
+for M9/M10: every new route added to the new app needs to actually be
+exercised end-to-end through the proxy before trusting it's not
+silently falling through to the legacy cluster — config that "looks
+right" isn't enough, per the same theme DL-012 and DL-016 already
+established for the legacy app.
+
+**Responsive design (DL-007's deferred item) needed no new CSS work:**
+`Site.css`, carried over unchanged, already had a complete
+`@media (max-width: 850px)` block (header, login, menu, layout, forms,
+footer) — evidently written for the app's older mobile-web-support
+effort and left in place after M3 removed the jQuery-Mobile-specific
+views. The rebuilt `_Layout.cshtml` keeps the same markup structure
+and the `<meta name="viewport">` tag that block targets, so DL-007's
+promised responsive design is inherited, not authored fresh.
+
+**A known, deliberate interim gap:** `_LoginPartial.cshtml` in the new
+app always renders the logged-out state (`Register`/`Log in` links to
+the legacy `/Account/*` routes) rather than reading real authentication
+state. The new app doesn't share the legacy app's OWIN authentication
+cookie — cross-app session handling during the transition is explicitly
+M10's acceptance criterion ("Session handling across the proxy boundary
+during the transition period... explicitly tested, not assumed"), not
+M8's. This is a visible, honest degradation (a genuinely logged-in user
+would see "Log in" on the new-app-served `Home` page) rather than a
+silent one, matching the pattern DL-007 already set for the mobile-view
+removal.
+
+**Testing:** `src-core/NerdDinner.Proxy.Tests` (new project,
+`Microsoft.AspNetCore.Mvc.Testing`) hosts the actual `NerdDinner.Proxy`
+app via `WebApplicationFactory<Program>` — its real `Program.cs` and
+`appsettings.json`, not a test-only substitute — and asserts against
+genuine HTTP responses: `/` and `/Home/About` are confirmed served by
+the new app (via a marker only its own `_Layout` renders), `/Dinners`
+(not yet migrated) is confirmed still reaching the legacy app through
+the same running proxy instance, and `/_proxy/health` confirms the
+diagnostic endpoint from M7 still works. Tagged
+`[Trait("Category", "Integration")]` and excluded from the default fast
+run, same convention as this repo's existing GeoNames/ipinfodb
+integration tests — it requires the legacy app to actually be running
+under IIS Express on `localhost:10581`, a live external dependency the
+test harness doesn't spin up itself. Run against a real, separately
+started legacy app during this milestone: 4/4 passed.
+
+**Status:** Adopted.

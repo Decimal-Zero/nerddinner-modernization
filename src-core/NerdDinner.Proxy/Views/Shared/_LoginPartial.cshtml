@@ -1,0 +1,7 @@
+@* Always renders logged-out. This app doesn't share the legacy app's OWIN
+   authentication cookie yet — cross-app session handling is M10's job
+   (Migrate Auth), not M8's. See decision-log.md DL-022. *@
+<ul>
+    <li><a href="~/Account/Register" id="registerLink">Register</a></li>
+    <li><a href="~/Account/Login" id="loginLink">Log in</a></li>
+</ul>

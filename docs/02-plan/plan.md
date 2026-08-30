@@ -212,28 +212,54 @@ hardest part is attempted.
 
 ### M8 — Migrate stateless/read-only routes
 
-Targets: `Home`, `Search`.
+**Status: complete and verified.** See `decision-log.md` DL-022.
+
+Target: `Home` only. **Narrowed from the original "`Home`, `Search`"
+scope — see `decision-log.md` DL-021.** `Search` is genuinely a
+data-layer migration (it queries `Dinner`/`RSVP` via a `DbGeography`
+spatial query, the exact same concern M9 already owns), not a routing
+concern, so it moves to M9 alongside `Dinners`/`RSVP` rather than being
+split across two milestones by data-access technology mid-migration.
 
 **Acceptance criteria:**
-- `Home` and `Search` routes are served by the ASP.NET Core app via the
-  proxy; all other routes remain on the legacy app.
+- `Home` routes are served by the ASP.NET Core app via the proxy; all
+  other routes (including `Search`) remain on the legacy app. **Done** —
+  `HomeController`/`Views/Home` ported into `NerdDinner.Proxy`, routed
+  via an explicit `controller=Home`-constrained conventional route,
+  ordered ahead of the YARP catch-all.
 - The `_Layout` rewrite required by the ASP.NET Core port (bundling
   mechanism differs entirely from `System.Web.Optimization`) includes
   responsive design, per DL-007 — this is where that deferred work
-  lands, since the layout is being rebuilt regardless.
-- Characterization tests for these routes pass against the new
-  implementation (via the proxy, exercising the real routing path — not
-  the new app in isolation).
+  lands, since the layout is being rebuilt regardless. **Done** — the
+  existing `Site.css` (carried over unchanged) already had a complete
+  `@media (max-width: 850px)` responsive block from the earlier mobile
+  effort; the rebuilt `_Layout.cshtml` keeps the viewport meta tag and
+  the same markup structure that block targets.
+- Characterization tests for `Home` pass against the new implementation
+  (via the proxy, exercising the real routing path — not the new app in
+  isolation). **Done** — `NerdDinner.Proxy.Tests` (new project) hosts the
+  real proxy app via `WebApplicationFactory` and asserts against actual
+  HTTP responses, including confirming `/Dinners` (unmigrated) still
+  reaches the legacy app through the same running instance.
 
-### M9 — Migrate Dinners (CRUD + spatial data)
+### M9 — Migrate Dinners, RSVP, and Search (CRUD + spatial data)
+
+`Search` folded in from M8's original scope — see DL-021. It shares
+this milestone's exact data-layer concern (spatial queries against
+`Dinner`/`RSVP` via EF Core once that lands), so it's genuinely a better
+fit here than split off with the stateless routes.
 
 **Acceptance criteria:**
-- `Dinners` and `RSVP` routes are served by the ASP.NET Core app.
+- `Dinners`, `RSVP`, and `Search` routes are served by the ASP.NET Core
+  app.
 - EF Core data access replaces EF6; `Dinner.Location` uses a
   NetTopologySuite-based spatial type in place of `DbGeography`, with
   behavior verified against characterization tests covering location
   storage and retrieval specifically (this was flagged in the assessment
-  as the easiest migration detail to miss).
+  as the easiest migration detail to miss). `Search`'s spatial query
+  (`FindByLocation`) is the first real exercise of this new data layer,
+  not `Dinners`/`RSVP` — worth verifying in that order given the
+  dependency.
 - Ownership-check logic (`IsHostedBy`) is preserved and tested.
 
 ### M10 — Migrate Auth (highest risk, migrated last)
@@ -276,7 +302,7 @@ Targets: `Home`, `Search`.
 | M6 | Data layer cleanup | 1 |
 | — | Phase 1 exit checkpoint | 1 |
 | M7 | Reverse proxy scaffold | 2 |
-| M8 | Migrate stateless/read-only routes | 2 |
-| M9 | Migrate Dinners (CRUD + spatial data) | 2 |
+| M8 | Migrate stateless/read-only routes (`Home`) | 2 |
+| M9 | Migrate Dinners, RSVP, and Search (CRUD + spatial data) | 2 |
 | M10 | Migrate Auth | 2 |
 | M11 | Decommission legacy app | 2 |
