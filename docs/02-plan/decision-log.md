@@ -1535,4 +1535,110 @@ genuine rewrite against Azure Maps' JS SDK (`atlas.Map`, a different API
 shape), touching every view that renders a map (`Home/Index`,
 `Dinners/Create`, `Dinners/Edit`, the `LocationDetail` templates).
 
+**Confirmed by the user's own independent manual verification after M11:**
+the completed, renamed `NerdDinner` app was exercised by hand end to
+end and found working correctly in every area except this one, already-
+documented gap — no new issues surfaced. The scope of what M11 verified
+live (this session's own testing) and what the user verified
+independently now agree.
+
 **Status:** Adopted (as a documented, deferred gap — not a fix).
+
+---
+
+### DL-031 — M11: legacy Framework app and reverse proxy decommissioned; `NerdDinner.Proxy` renamed to `NerdDinner`
+
+**Decision:** The legacy .NET Framework application (`src/`, the
+original MVC4/.NET 4.5 codebase this whole engagement started from,
+upgraded through Phase 1) and `NerdDinner.Tests` (its characterization
+suite) are removed from the working tree via `git rm` — recoverable
+from git history (the `bf314f5` baseline import and every commit since),
+not gone forever, same no-history-rewrite approach DL-018 used for the
+checked-in `.mdf`/`.ldf` files at M6. The now-orphaned `packages/`
+folder (NuGet packages for the deleted classic-framework projects,
+already gitignored) is deleted outright.
+
+`src-core/NerdDinner.Proxy` — the ASP.NET Core app built up across
+M7–M10 — is renamed to `NerdDinner` and moved to `src/NerdDinner`,
+replacing the deleted legacy app at the path a reader would naturally
+expect to find "the app." Its test project moves from
+`src-core/NerdDinner.Proxy.Tests` to top-level `NerdDinner.Tests`,
+reoccupying the exact name and location the legacy test project used.
+Every `NerdDinner.Proxy.*` namespace collapses to `NerdDinner.*`
+throughout (`NerdDinner.Proxy.Controllers` → `NerdDinner.Controllers`,
+etc.) via a single substring find/replace (`NerdDinner.Proxy` →
+`NerdDinner`, safe here because every variant shares that literal
+prefix). Test infrastructure classes that had picked up a "Proxy"
+qualifier along the way during the transition
+(`ProxyTestDatabaseFixture`, `ProxyIdentityTestDatabaseFixture`, their
+`Proxy*.cs` filenames, and their LocalDB catalog names
+`NerdDinnerProxyTests`/`NerdDinnerProxyIdentityTests`) are renamed too,
+back to what the original legacy suite called its equivalents
+(`TestDatabaseFixture`, `IdentityTestDatabaseFixture`,
+`NerdDinnerTests`/`NerdDinnerIdentityTests`) — no collision risk now
+that the legacy suite that first used those names is gone.
+
+**Reasoning for the rename (a live choice, not a default):** the user
+was asked directly whether to rename now that the project is no longer
+a proxy in front of anything, versus leaving the M7-era name as a
+historical artifact. Chosen to rename despite the larger mechanical
+footprint (namespace-wide find/replace, `.csproj`/`.sln` updates, both
+test projects' references) because the end state is meant to be the
+final, permanent shape of this codebase, not a transitional one — a
+project called "Proxy" that proxies nothing would be a confusing
+artifact for anyone approaching the finished repository cold.
+
+**Proxy infrastructure removed from `Program.cs`/`appsettings.json`:**
+`AddReverseProxy()`/`.LoadFromConfig(...)`, `MapReverseProxy()`, the
+`ReverseProxy` config section, the `Yarp.ReverseProxy` package
+reference, and the `/_proxy/health` diagnostic endpoint (M7's own
+verification tool, no longer meaningful with nothing to route between)
+are all gone. The default MVC route's `constraints: new { controller =
+"Home|Dinners|RSVP|Account" }` — needed at M8–M10 so unmigrated
+controllers would fall through to the YARP catch-all — reverts to the
+plain, unconstrained default route, since there's no fallback left to
+defer to.
+
+**Verified live, the actual final shape, not just "it compiles":**
+started the renamed `NerdDinner` app alone (no legacy app, no IIS
+Express, nothing else running) and confirmed Home, Dinners,
+Account/Login, and `api/Search` all serve correctly; confirmed the
+removed `/_proxy/health` and `glimpse.axd` (both real, live-forwarded
+endpoints as recently as M10) now correctly 404 with nothing to forward
+to; ran a full register → authenticated `Dinners/Create` → real dinner
+save cycle standalone, confirming M10's auth work holds with zero
+proxy/legacy dependency anywhere in the loop.
+
+**Test suite updated to match, not just made to compile:**
+`HomeRoutingTests` (originally built at M8 specifically to prove the
+proxy's routing decision) is retired to plain smoke tests — there's no
+more "served by the new app" vs. "forwarded to legacy" distinction to
+prove, so its `_NotProxied` framing and its `GlimpseAxd_...`/
+`ProxyHealthEndpoint_...` tests (both asserting on infrastructure that
+no longer exists) are removed; a new
+`NonexistentRoute_Returns404_NotSwallowedByAFallback` test replaces them,
+confirming an unmatched route now genuinely 404s rather than silently
+vanishing into a catch-all. `AuthFlowTests` keeps its
+`Category=Integration` tag, but for a different, now-accurate reason:
+not a live external dependency (that reason — the legacy app running —
+is gone), but because it's the one test class that writes to the shared
+dev `NerdDinner` database, kept out of the default fast run so ordinary
+cycles don't depend on or perturb it.
+
+**A real, unrelated bug resurfaced during this milestone's test run,
+not caused by it:** `SearchApi_Serves` failed against the live shared
+dev database because a dinner created earlier (`DinnerID 1005`, "My
+Dinner," `Location = NULL` — the same characterized
+`JsonDinnerFromDinner` NRE from DL-028, root-caused live to a missing
+Bing Maps key and logged as a deferred gap in DL-030) was still present.
+Removed directly from the database (confirmed with the user first,
+given the destructive nature of the action) rather than treated as an
+M11 regression — re-ran the full suite clean afterward.
+
+**Final verification:** 39/39 passing in the renamed `NerdDinner.Tests`
+against `NerdDinner`, the single, sole application. No `src/`
+(legacy) files exist anymore for any characterization test to target —
+this milestone's own test suite *is* "the final characterization
+suite" plan.md's M11 acceptance criteria asks to pass.
+
+**Status:** Adopted.

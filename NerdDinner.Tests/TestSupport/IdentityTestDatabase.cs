@@ -1,43 +1,46 @@
-using System;
-using System.Data.Entity;
+using Microsoft.EntityFrameworkCore;
 using NerdDinner.Models;
 using Xunit;
 
 namespace NerdDinner.Tests.TestSupport
 {
-    /// <summary>
-    /// Creates a fresh NerdDinnerIdentityTests LocalDB database (ASP.NET
-    /// Identity's AspNetUsers/AspNetRoles/etc. tables) before the
-    /// Identity-backed test collection runs, and drops it afterward. Kept
-    /// as a separate database from TestDatabaseFixture's NerdDinnerTests
-    /// (see DefaultConnection vs. NerdDinnerContext in App.config) so the
-    /// two fixtures' drop/create lifecycles can't interfere with each
-    /// other.
-    /// </summary>
+    // Dedicated LocalDB catalog for Identity tests -- separate from both
+    // the shared dev "NerdDinner.Identity" database (M10, DL-029) and
+    // NerdDinner's Dinners-oriented TestDatabaseFixture, same
+    // reasoning as the legacy test project's separate
+    // IdentityTestDatabaseFixture/TestDatabaseFixture split: an
+    // automated suite creating/dropping throwaway user accounts
+    // shouldn't touch the same database a developer is manually
+    // exercising the app against.
     public class IdentityTestDatabaseFixture : IDisposable
     {
+        public const string ConnectionString =
+            "Data Source=(LocalDB)\\MSSQLLocalDB;Initial Catalog=NerdDinnerIdentityTests;Integrated Security=True;MultipleActiveResultSets=True";
+
         public IdentityTestDatabaseFixture()
         {
-            Database.SetInitializer(new DropCreateDatabaseAlways<ApplicationDbContext>());
+            using var db = CreateContext();
+            db.Database.EnsureDeleted();
+            db.Database.EnsureCreated();
+        }
 
-            using (var db = new ApplicationDbContext(TestConnectionStrings.Get("DefaultConnection")))
-            {
-                db.Database.Initialize(force: true);
-            }
+        public static ApplicationDbContext CreateContext()
+        {
+            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseSqlServer(ConnectionString)
+                .Options;
+            return new ApplicationDbContext(options);
         }
 
         public void Dispose()
         {
-            using (var db = new ApplicationDbContext(TestConnectionStrings.Get("DefaultConnection")))
-            {
-                db.Database.Delete();
-            }
+            using var db = CreateContext();
+            db.Database.EnsureDeleted();
         }
     }
 
     [CollectionDefinition("NerdDinner Identity LocalDB collection")]
     public class IdentityDatabaseCollection : ICollectionFixture<IdentityTestDatabaseFixture>
     {
-        // Marker class per xUnit convention -- no body needed.
     }
 }

@@ -20,19 +20,31 @@ See `NOTICE.md` for where this codebase came from and its license basis
 
 ## Status
 
-**Baseline import.** The legacy application is in place as-received;
-assessment has not yet started.
+**Complete.** Both phases of the modernization plan (`docs/02-plan/plan.md`)
+have run to completion and been verified:
+
+- **Phase 1** (M1–M6): in-place upgrade to .NET Framework 4.8.x — auth
+  stack replaced, security/configuration hardening, dependencies
+  brought current, data layer cleaned up.
+- **Phase 2** (M7–M11): strangler-fig cutover to ASP.NET Core / .NET 10,
+  migrated route-by-route behind a reverse proxy, auth migrated last,
+  ending with the legacy .NET Framework application and the proxy both
+  fully decommissioned. `NerdDinner` is now a single ASP.NET Core / .NET
+  10 application — the legacy codebase this repository started from no
+  longer exists in the working tree (recoverable via git history).
+
+See `docs/02-plan/decision-log.md` for the full record of what changed
+and why, milestone by milestone.
 
 ## Repository structure
 
 ```
-/                   Application source (legacy today; modernized in place
-                     as the engagement proceeds)
+/src/NerdDinner       Application source (ASP.NET Core / .NET 10)
+/NerdDinner.Tests     xUnit test suite
 /docs
-  01-assessment/    Modernization assessment scorecard and findings
+  01-assessment/    Original modernization assessment scorecard and findings
   02-plan/          Scope, milestones, acceptance criteria, decision log
-  03-outcome/       What changed, verification results, before/after
-                     comparison, lessons learned
+  03-outcome/       Phase 1 exit checkpoint: before/after verification
 LICENSE.txt         Microsoft Public License (Ms-PL)
 NOTICE.md           Provenance and license basis
 ```

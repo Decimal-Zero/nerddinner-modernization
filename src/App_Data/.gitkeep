@@ -1,5 +1,0 @@
-This folder is intentionally empty. The checked-in .mdf/.ldf LocalDB
-files that used to live here were removed in M6 (data layer cleanup) --
-the schema and sample data are now reproduced by EF6 Migrations
-(src/Migrations/) against named LocalDB databases, not attached files.
-See docs/02-plan/decision-log.md DL-018.

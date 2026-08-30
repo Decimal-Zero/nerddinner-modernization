@@ -325,10 +325,18 @@ fit here than split off with the stateless routes.
 
 ### M11 — Decommission legacy app
 
+**Status: complete and verified.** See `decision-log.md` DL-031.
+
 **Acceptance criteria:**
-- All routes are served by the ASP.NET Core app.
+- All routes are served by the ASP.NET Core app. **Done** — confirmed
+  live standalone (no legacy app, no proxy, nothing else running):
+  Home, Dinners, RSVP, Account, and `api/Search` all serve correctly.
 - The reverse proxy and legacy Framework app are removed from the
-  running system.
+  running system. **Done** — `src/` (the legacy Framework app) and the
+  YARP reverse-proxy plumbing (`Program.cs`, `appsettings.json`, the
+  `Yarp.ReverseProxy` package reference) are all removed. The renamed
+  `NerdDinner` app (formerly `NerdDinner.Proxy`, see DL-031) is now the
+  sole application.
 - Glimpse (`Glimpse`, `Glimpse.AspNet`, `Glimpse.Mvc4`) is gone along
   with it — unmaintained since ~2014, disposed of as "remove entirely"
   back in M1, but never assigned to any Phase 1 milestone's actual
@@ -336,8 +344,14 @@ fit here than split off with the stateless routes.
   residual finding in the Phase 1 exit checkpoint
   (`docs/03-outcome/phase-1-exit-checkpoint.md`); called out explicitly
   here rather than left to happen implicitly when the legacy Framework
-  app is deleted, so it can't quietly get missed a second time.
+  app is deleted, so it can't quietly get missed a second time. **Done**
+  — Glimpse only ever existed in the deleted legacy app; confirmed gone
+  by deleting `src/` and separately confirming `glimpse.axd` now 404s
+  with nothing to forward it to.
 - Full characterization suite passes against the final, sole application.
+  **Done** — 39/39 in the renamed `NerdDinner.Tests`, run directly
+  against `NerdDinner` with no proxy/legacy dependency anywhere in the
+  loop.
 
 **Not in scope for M11, deliberately:** replacing Bing Maps (its free
 tier is retired) with a working mapping provider such as Azure Maps —

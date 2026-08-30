@@ -1,18 +1,16 @@
-using System;
-using System.Web.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using NerdDinner.Controllers;
+using NerdDinner.Helpers;
 using NerdDinner.Models;
 using NerdDinner.Tests.TestSupport;
-using X.PagedList;
 using Xunit;
 
 namespace NerdDinner.Tests.Controllers
 {
-    // Seed data (see TestDatabase.cs):
-    //   "Past Dinner"          - EventDate -7d,  HostedBy "alice"
-    //   "Alice's Dinner"       - EventDate +7d,  HostedBy "alice"
-    //   "Bob's Dinner"         - EventDate +14d, HostedBy "bob", 2 RSVPs (bob, carol)
-
+    // Ported from NerdDinner.Tests.Controllers.DinnersControllerTests (M9,
+    // decision-log.md DL-028) -- same behaviors characterized, including
+    // the preserved DeleteConfirmed NRE-on-missing-id gap (DL-004: capture
+    // current behavior, don't fix it mid-port).
     [Collection("NerdDinner LocalDB collection")]
     public class DinnersControllerTests
     {
@@ -21,12 +19,11 @@ namespace NerdDinner.Tests.Controllers
             fixture.Reset();
         }
 
-        // --- Index: only future dinners, ordered by date ---
-
         [Fact]
         public void Index_ExcludesPastDinners()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
 
             var result = controller.Index(page: null) as ViewResult;
             var model = (IPagedList<Dinner>)result.Model;
@@ -37,36 +34,34 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void Index_OrdersUpcomingDinnersByEventDateAscending()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
 
             var result = controller.Index(page: null) as ViewResult;
             var model = (IPagedList<Dinner>)result.Model;
 
-            // "Alice's Dinner" (+7d) should come before "Bob's Dinner" (+14d)
-            var titles = new System.Collections.Generic.List<string>();
+            var titles = new List<string>();
             foreach (var d in model) titles.Add(d.Title);
 
             Assert.True(titles.IndexOf("Alice's Dinner") < titles.IndexOf("Bob's Dinner"));
         }
 
-        // --- Details ---
-
         [Fact]
-        public void Details_ReturnsHttpNotFound_ForNonexistentId()
+        public void Details_ReturnsNotFound_ForNonexistentId()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
 
             var result = controller.Details(id: 999999);
 
-            Assert.IsType<HttpNotFoundResult>(result);
+            Assert.IsType<NotFoundResult>(result);
         }
-
-        // --- Create (GET): prefills from the current user ---
 
         [Fact]
         public void CreateGet_PrefillsHostedByFromCurrentUser()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
             controller.SetFakeUser("alice");
 
             var result = controller.Create() as ViewResult;
@@ -76,25 +71,35 @@ namespace NerdDinner.Tests.Controllers
         }
 
         [Fact]
-        public void CreateGet_DefaultsEventDateToOneWeekFromNow()
+        public void CreatePost_AddsDinnerWithHostAsFirstRSVP()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
-            controller.SetFakeUser("alice");
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
+            controller.SetFakeUser("erin");
 
-            var result = controller.Create() as ViewResult;
-            var dinner = (Dinner)result.Model;
+            var dinner = new Dinner
+            {
+                Title = "Erin's New Dinner",
+                EventDate = DateTime.Now.AddDays(3),
+                Description = "A brand new dinner",
+                ContactPhone = "555-0199",
+                Address = "5 New St",
+                Country = "USA"
+            };
 
-            // Loose bound rather than exact equality, since "now" ticks
-            // forward between the controller call and this assertion.
-            Assert.InRange(dinner.EventDate, DateTime.Now.AddDays(6.9), DateTime.Now.AddDays(7.1));
+            controller.Create(dinner);
+
+            using var verifyDb = TestDatabaseFixture.CreateContext();
+            var saved = verifyDb.Dinners.First(d => d.Title == "Erin's New Dinner");
+            Assert.Equal("erin", saved.HostedBy);
+            Assert.Contains(saved.RSVPs, r => r.AttendeeName == "erin");
         }
-
-        // --- Create (POST): invalid ModelState redisplays the form ---
 
         [Fact]
         public void CreatePost_ReturnsViewWithModel_WhenModelStateInvalid()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
             controller.SetFakeUser("alice");
             controller.ModelState.AddModelError("Title", "Title is required");
 
@@ -105,16 +110,12 @@ namespace NerdDinner.Tests.Controllers
             Assert.Same(dinner, result.Model);
         }
 
-        // --- Edit: ownership check (the core finding from the assessment) ---
-
         [Fact]
         public void EditGet_ReturnsInvalidOwnerView_WhenCurrentUserIsNotHost()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
             controller.SetFakeUser("bob");
-
-            // "Alice's Dinner" is hosted by alice; find its id via a
-            // throwaway query since the fixture doesn't expose ids directly.
             int dinnerId = FindDinnerIdByTitle("Alice's Dinner");
 
             var result = controller.Edit(dinnerId) as ViewResult;
@@ -123,35 +124,23 @@ namespace NerdDinner.Tests.Controllers
         }
 
         [Fact]
-        public void EditGet_ReturnsDinnerView_WhenCurrentUserIsHost()
+        public void EditGet_ReturnsDefaultView_WhenCurrentUserIsHost()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
             controller.SetFakeUser("alice");
             int dinnerId = FindDinnerIdByTitle("Alice's Dinner");
 
             var result = controller.Edit(dinnerId) as ViewResult;
 
-            // Default view (empty ViewName), not "InvalidOwner"
             Assert.True(string.IsNullOrEmpty(result.ViewName));
         }
 
         [Fact]
-        public void EditGet_ReturnsHttpNotFound_ForNonexistentId()
-        {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
-            controller.SetFakeUser("alice");
-
-            var result = controller.Edit(id: 999999);
-
-            Assert.IsType<HttpNotFoundResult>(result);
-        }
-
-        // --- Delete: same ownership check pattern ---
-
-        [Fact]
         public void DeleteGet_ReturnsInvalidOwnerView_WhenCurrentUserIsNotHost()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
             controller.SetFakeUser("bob");
             int dinnerId = FindDinnerIdByTitle("Alice's Dinner");
 
@@ -163,36 +152,28 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void DeleteConfirmed_ThrowsNullReferenceException_ForNonexistentId()
         {
-            // Real, pre-existing bug, characterized rather than fixed here:
+            // Preserved from the legacy characterization, per DL-004 --
             // DeleteConfirmed calls db.Dinners.Find(id) and immediately
-            // calls dinner.IsHostedBy(...) with no null check -- unlike
-            // the GET Delete action, which does check for null and returns
-            // HttpNotFound. A POST to /Dinners/Delete/{missing-id} throws
-            // an unhandled NRE today rather than a clean 404. This is
-            // exactly the kind of thing DL-004 says to capture honestly:
-            // current (bad) behavior, not the behavior we'd prefer it had.
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            // dereferences the result with no null check.
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
             controller.SetFakeUser("alice");
 
             Assert.Throws<NullReferenceException>(() => controller.DeleteConfirmed(id: 999999));
         }
 
-        // --- WebSlice actions: simple enough to pin down directly ---
-
         [Fact]
         public void WebSlicePopular_OrdersByRSVPCountDescending_AndExcludesPastDinners()
         {
-            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            using var db = TestDatabaseFixture.CreateContext();
+            var controller = new DinnersController(db);
 
             var result = controller.WebSlicePopular() as ViewResult;
-            var model = (System.Collections.Generic.IEnumerable<Dinner>)result.Model;
+            var model = (IEnumerable<Dinner>)result.Model;
 
-            var titles = new System.Collections.Generic.List<string>();
-            foreach (var d in model) titles.Add(d.Title);
+            var titles = model.Select(d => d.Title).ToList();
 
             Assert.DoesNotContain("Past Dinner", titles);
-            // "Bob's Dinner" has 2 RSVPs vs. "Alice's Dinner"'s 0, so it
-            // should be first if both are present.
             if (titles.Contains("Bob's Dinner") && titles.Contains("Alice's Dinner"))
             {
                 Assert.True(titles.IndexOf("Bob's Dinner") < titles.IndexOf("Alice's Dinner"));
@@ -201,11 +182,8 @@ namespace NerdDinner.Tests.Controllers
 
         private static int FindDinnerIdByTitle(string title)
         {
-            using (var db = new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")))
-            {
-                var dinner = System.Linq.Enumerable.First(db.Dinners, d => d.Title == title);
-                return dinner.DinnerID;
-            }
+            using var db = TestDatabaseFixture.CreateContext();
+            return db.Dinners.First(d => d.Title == title).DinnerID;
         }
     }
 }

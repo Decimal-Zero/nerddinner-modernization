@@ -1,12 +1,24 @@
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using NerdDinner.Controllers;
-using NerdDinner.Models;
+using NerdDinner.Services;
 using NerdDinner.Tests.TestSupport;
-using System;
-using System.Linq;
 using Xunit;
 
 namespace NerdDinner.Tests.Controllers
 {
+    // Ported from NerdDinner.Tests.Controllers.SearchControllerTests (M9,
+    // decision-log.md DL-028), plus real coverage of the spatial distance
+    // query (SearchByLocation/FindByLocation) that the legacy suite could
+    // never exercise -- GeolocationService there was a static class
+    // tightly coupled to ConfigurationManager, with no seam to construct
+    // it independently of a live network call. Here it's constructor
+    // injectable, so the network-free half of Search (the actual spatial
+    // query -- the "first real exercise of this new data layer" plan.md's
+    // M9 acceptance criteria calls out) is directly testable. The
+    // geocoding-driven half (SearchByPlaceNameOrZip) still needs a live
+    // GeoNames call and stays untested here for the same reason as the
+    // legacy suite's documented gap.
     [Collection("NerdDinner LocalDB collection")]
     public class SearchControllerTests
     {
@@ -15,13 +27,60 @@ namespace NerdDinner.Tests.Controllers
             fixture.Reset();
         }
 
+        private static SearchController CreateController()
+        {
+            var db = TestDatabaseFixture.CreateContext();
+            var configuration = new ConfigurationBuilder().Build();
+            var geolocationService = new GeolocationService(configuration, new MemoryCache(new MemoryCacheOptions()));
+            return new SearchController(db, geolocationService);
+        }
+
+        [Fact]
+        public void SearchByLocation_FindsNearbyDinner_WithinDistanceThreshold()
+        {
+            var controller = CreateController();
+
+            // Exact seed coordinates for "Alice's Dinner"/"Bob's Dinner"/
+            // "Past Dinner" (downtown Seattle) -- see TestDatabase.cs.
+            var result = controller.SearchByLocation(47.608013, -122.335167).ToList();
+
+            var titles = result.Select(d => d.Title).ToList();
+            Assert.Contains("Alice's Dinner", titles);
+            Assert.Contains("Bob's Dinner", titles);
+        }
+
+        [Fact]
+        public void SearchByLocation_ExcludesDinner_OutsideDistanceThreshold()
+        {
+            var controller = CreateController();
+
+            // Same query point as above -- "Portland Dinner" is seeded
+            // ~250km away, well outside the 2000m radius.
+            var result = controller.SearchByLocation(47.608013, -122.335167).ToList();
+
+            Assert.DoesNotContain(result, d => d.Title == "Portland Dinner");
+        }
+
+        [Fact]
+        public void SearchByLocation_ReturnsCorrectCoordinates_ForMatchedDinner()
+        {
+            // Confirms the round trip through the geography column and
+            // back out as JsonDinner.Latitude/Longitude is exact, not
+            // just "a query executed" -- the M9 acceptance criteria's
+            // specific concern about location storage/retrieval.
+            var controller = CreateController();
+
+            var result = controller.SearchByLocation(47.608013, -122.335167).ToList();
+            var dinner = result.First(d => d.Title == "Alice's Dinner");
+
+            Assert.Equal(47.608013, dinner.Latitude, precision: 5);
+            Assert.Equal(-122.335167, dinner.Longitude, precision: 5);
+        }
+
         [Fact]
         public void SearchByPlaceNameOrZip_ReturnsNull_ForEmptyLocation()
         {
-            // The one branch of this action testable without a live
-            // network call -- it short-circuits before ever reaching
-            // GeolocationService.
-            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            var controller = CreateController();
 
             var result = controller.SearchByPlaceNameOrZip(location: "");
 
@@ -31,7 +90,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void SearchByPlaceNameOrZip_ReturnsNull_ForNullLocation()
         {
-            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            var controller = CreateController();
 
             var result = controller.SearchByPlaceNameOrZip(location: null);
 
@@ -41,15 +100,12 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void GetMostPopularDinners_OrdersByRSVPCountDescending()
         {
-            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            var controller = CreateController();
 
             var result = controller.GetMostPopularDinners(limit: 10).ToList();
 
-            // "Bob's Dinner" (2 RSVPs) should outrank "Alice's Dinner" (0)
-            // if both appear.
             var bobIndex = result.FindIndex(d => d.Title == "Bob's Dinner");
             var aliceIndex = result.FindIndex(d => d.Title == "Alice's Dinner");
-            System.Diagnostics.Trace.WriteLine($"Bob index: {bobIndex}, Alice index: {aliceIndex}");
 
             if (bobIndex >= 0 && aliceIndex >= 0)
             {
@@ -60,7 +116,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void GetMostPopularDinners_ExcludesPastDinners()
         {
-            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            var controller = CreateController();
 
             var result = controller.GetMostPopularDinners(limit: 10).ToList();
 
@@ -70,17 +126,14 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void JsonDinnerFromDinner_ThrowsNullReferenceException_WhenDinnerHasNoLocation()
         {
-            // Found while building this fixture: JsonDinnerFromDinner
-            // dereferences dinner.Location.Latitude/.Longitude
-            // unconditionally. A dinner with no Location set (which the
-            // model layer permits -- Location has no [Required]
-            // attribute, see DinnerTests) throws NRE the moment it's
-            // serialized to JSON, rather than omitting coordinates or
-            // filtering the dinner out. Characterized directly here via
-            // GetMostPopularDinners, the code path that hits it.
-            using (var db = new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")))
+            // Preserved from the legacy characterization (DL-004):
+            // JsonDinnerFromDinner dereferences dinner.Location
+            // unconditionally -- a dinner with no Location (permitted by
+            // the model; see DinnerTests) throws NRE on serialization
+            // rather than being filtered out or omitting coordinates.
+            using (var db = TestDatabaseFixture.CreateContext())
             {
-                db.Dinners.Add(new Dinner
+                db.Dinners.Add(new Models.Dinner
                 {
                     Title = "No Location Dinner",
                     EventDate = DateTime.Now.AddDays(1),
@@ -94,23 +147,9 @@ namespace NerdDinner.Tests.Controllers
                 db.SaveChanges();
             }
 
-            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
+            var controller = CreateController();
 
             Assert.Throws<NullReferenceException>(() => controller.GetMostPopularDinners(limit: 10).ToList());
         }
-
-        // --- Documented gap, not a test: SearchByPlaceNameOrZip's
-        // geocoding-driven branch, and SearchByLocation/FindByLocation's
-        // DbGeography.Distance() spatial query, both require either a
-        // live call to GeolocationService's external APIs or a seam that
-        // doesn't exist in this codebase (GeolocationService is a static
-        // class tightly coupled to ConfigurationManager and a static
-        // MemoryCache -- see the assessment's Architecture/Category 2
-        // coupling finding). Characterizing these paths as true unit
-        // tests isn't possible without either accepting network flakiness
-        // in the test suite or introducing a seam, which is itself a
-        // (non-behavioral) code change this milestone isn't scoped to
-        // make. See GeolocationServiceTests.cs for the same limitation,
-        // handled there via explicitly-tagged integration tests instead.
     }
 }
