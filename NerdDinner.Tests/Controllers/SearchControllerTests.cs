@@ -124,13 +124,20 @@ namespace NerdDinner.Tests.Controllers
         }
 
         [Fact]
-        public void JsonDinnerFromDinner_ThrowsNullReferenceException_WhenDinnerHasNoLocation()
+        public void JsonDinnerFromDinner_UsesZeroZeroCoordinates_WhenDinnerHasNoLocation()
         {
-            // Preserved from the legacy characterization (DL-004):
-            // JsonDinnerFromDinner dereferences dinner.Location
-            // unconditionally -- a dinner with no Location (permitted by
-            // the model; see DinnerTests) throws NRE on serialization
-            // rather than being filtered out or omitting coordinates.
+            // Deliberate behavior change, not a silent one -- see
+            // decision-log.md DL-032. This used to be a preserved
+            // characterized bug (DL-004/DL-028): JsonDinnerFromDinner
+            // dereferenced dinner.Location unconditionally, throwing an
+            // NRE for any dinner with no Location (legal by the model's
+            // own contract; see DinnerTests). With Bing Maps' free tier
+            // retired and no in-plan replacement (DL-030), a dinner
+            // created without a geocoded address stopped being a rare
+            // edge case and started being the common path -- an NRE here
+            // took down the front page's "Popular Dinners" list (and any
+            // other Search-backed page) every time. Now uses (0, 0) as a
+            // placeholder instead of throwing.
             using (var db = TestDatabaseFixture.CreateContext())
             {
                 db.Dinners.Add(new Models.Dinner
@@ -149,7 +156,11 @@ namespace NerdDinner.Tests.Controllers
 
             var controller = CreateController();
 
-            Assert.Throws<NullReferenceException>(() => controller.GetMostPopularDinners(limit: 10).ToList());
+            var result = controller.GetMostPopularDinners(limit: 10).ToList();
+            var dinner = result.First(d => d.Title == "No Location Dinner");
+
+            Assert.Equal(0, dinner.Latitude);
+            Assert.Equal(0, dinner.Longitude);
         }
     }
 }

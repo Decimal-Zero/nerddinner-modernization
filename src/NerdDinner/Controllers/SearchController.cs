@@ -117,12 +117,25 @@ namespace NerdDinner.Controllers
 
         private JsonDinner JsonDinnerFromDinner(Dinner dinner)
         {
+            // Deliberate fix, not a silently-preserved characterized bug --
+            // see decision-log.md DL-032. A dinner with no geocoded
+            // Location (legal by the model's own contract; no [Required]
+            // attribute) used to throw a NullReferenceException here,
+            // taking down every Search-backed page (including the front
+            // page's "Popular Dinners" list) the moment one existed. With
+            // Bing Maps' free tier retired (DL-030) and no in-plan
+            // replacement, that's no longer a rare edge case -- (0,0) is
+            // used as a placeholder so JSON serialization and every caller
+            // that expects Latitude/Longitude to be present keep working.
+            var latitude = dinner.Location?.Y ?? 0;
+            var longitude = dinner.Location?.X ?? 0;
+
             return new JsonDinner
             {
                 DinnerID = dinner.DinnerID,
                 EventDate = dinner.EventDate,
-                Latitude = dinner.Location.Y,
-                Longitude = dinner.Location.X,
+                Latitude = latitude,
+                Longitude = longitude,
                 Title = dinner.Title,
                 Description = dinner.Description,
                 RSVPCount = dinner.RSVPs.Count(),

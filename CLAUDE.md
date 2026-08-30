@@ -96,11 +96,15 @@ because the milestone list is complete.
   deliberately with a comment explaining the change — never silently.
 - **Document real bugs found; don't silently fix them mid-milestone.**
   Several pre-existing bugs (unhandled NREs in `DinnersController`/
-  `RSVPController` on missing ids, `SearchController.JsonDinnerFromDinner`
-  NREs on a dinner with no `Location`) were found during characterization
+  `RSVPController` on missing ids) were found during characterization
   and deliberately preserved, ported forward milestone to milestone, and
   characterized rather than fixed as a side effect — see DL-004 and
-  DL-028.
+  DL-028. One exception: `SearchController.JsonDinnerFromDinner`'s
+  NRE-on-null-`Location` was preserved the same way through M9, but was
+  later fixed for real (falls back to `(0, 0)` instead of throwing) once
+  DL-030 established that a null `Location` had stopped being a rare
+  edge case (Bing Maps' free tier retirement) and become the common
+  case — an explicit, user-requested fix, not a silent one. See DL-032.
 - **No fabricated context.** The assessment's Category 10 (Business
   Criticality) is deliberately left unscored because there's no real
   business behind this codebase — an earlier draft invented one and it

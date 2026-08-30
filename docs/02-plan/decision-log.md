@@ -1642,3 +1642,62 @@ this milestone's own test suite *is* "the final characterization
 suite" plan.md's M11 acceptance criteria asks to pass.
 
 **Status:** Adopted.
+
+---
+
+### DL-032 — `JsonDinnerFromDinner`'s NRE-on-null-`Location` characterized bug fixed for real: falls back to (0, 0)
+
+**Decision:** `SearchController.JsonDinnerFromDinner` no longer throws a
+`NullReferenceException` for a `Dinner` with no geocoded `Location`. It
+now uses `(0, 0)` as a placeholder for `Latitude`/`Longitude`
+(`dinner.Location?.Y ?? 0`, `dinner.Location?.X ?? 0`) and returns
+normally. This is a deliberate, explicit fix requested by the user —
+not a silent one, and not something this session decided unilaterally.
+
+**Context:** This was a real, pre-existing bug in the original 2012
+baseline, deliberately characterized rather than fixed at M2 (per
+DL-004) and ported forward unchanged through M9 (DL-028) as "capture
+current behavior, bugs included." That discipline made sense while
+Bing Maps worked and a null `Location` was a genuine edge case. Once
+DL-030 established that Bing Maps' free tier is retired with no in-plan
+replacement, a null `Location` stopped being an edge case — it's now
+the default outcome of every dinner creation, since the client-side map
+control that would populate it never successfully geocodes anything.
+This session hit the resulting crash live, repeatedly, across several
+different leftover dinners (DL-031's "My Dinner"/`DinnerID 1005`, and
+this session's "Justin's Dinner"/`DinnerID 1010`) — each time requiring
+a manual `DELETE` from the database to unblock the front page, which
+depends on `GetMostPopularDinners` succeeding. The user asked directly
+to stop treating this as a characterized bug and fix it.
+
+**Reasoning for `(0, 0)` specifically, not filtering the dinner out or
+some other placeholder:** matches exactly what the user asked for.
+`(0, 0)` is a real, if nonsensical, coordinate (the "Null Island" point
+in the Gulf of Guinea) — chosen here purely as an inert placeholder
+value the JSON contract already has a slot for (`Latitude`/`Longitude`
+are non-nullable `double` on `JsonDinner`), not as a claim that it's
+meaningful. `NerdDinner.js`'s client-side rendering doesn't currently
+plot popular-dinner markers using this endpoint's coordinates in a way
+that would visibly place a pin at the wrong spot on a map users can
+see — the practical effect is just that the dinner appears in the
+"Popular Dinners" list without crashing anything, which is what the
+user's fix is for.
+
+**Test updated deliberately, per DL-004's own standard for exactly this
+situation** ("if a change legitimately changes observable behavior,
+that's a decision-log entry, and the test gets updated deliberately
+with a comment explaining the change — never silently"):
+`JsonDinnerFromDinner_ThrowsNullReferenceException_WhenDinnerHasNoLocation`
+is renamed `JsonDinnerFromDinner_UsesZeroZeroCoordinates_WhenDinnerHasNoLocation`
+and now asserts `Latitude == 0 && Longitude == 0` for a dinner with a
+null `Location`, instead of asserting the old NRE.
+
+**Verified live**, not just via the updated unit test: inserted a real
+null-`Location` dinner directly into the shared dev database, hit
+`POST api/Search?limit=10` (the exact endpoint `NerdDinner.js`'s
+`FindMostPopularDinners` calls from the front page), and confirmed a
+`200` response with that dinner correctly present at
+`"Latitude":0,"Longitude":0` rather than the request failing entirely.
+Verification dinner removed afterward.
+
+**Status:** Adopted.
