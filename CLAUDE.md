@@ -50,8 +50,14 @@ if anything here conflicts with them, they win.
   `docs/03-outcome/phase-1-exit-checkpoint.md` — Categories 1/5/7/8 all
   moved out of "replace/rebuild candidate," with one named residual
   (Glimpse, still live, never actually removed despite M1 flagging it).
-  **Phase 1 (M1–M6) is fully complete.** Phase 2 (M7: reverse proxy
-  scaffold) is next, whenever that's wanted — see `plan.md`.
+  **Phase 1 (M1–M6) is fully complete.**
+- **M7 (reverse proxy scaffold): complete and verified.**
+  `src-core/NerdDinner.Proxy` (ASP.NET Core / .NET 10, YARP) added
+  alongside the legacy app; a catch-all route forwards every request to
+  the legacy app, with only a diagnostic `/_proxy/health` endpoint
+  handled locally. Verified live (both apps run, proxy forwards
+  correctly), not just built — see `decision-log.md` DL-020. M8
+  (migrate `Home`/`Search`) is next.
 - Full suite: 80 passed, 0 skipped (`Category!=Integration` filter —
   the GeoNames/ipinfodb Integration tests need your own locally-stored
   GeoNames username, per DL-013, and aren't part of the default fast

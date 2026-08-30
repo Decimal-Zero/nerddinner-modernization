@@ -759,3 +759,46 @@ app entirely, but leaving it implicit is how it got missed the first
 time.
 
 **Status:** Adopted.
+
+---
+
+### DL-020 — M7 reverse proxy scaffold: YARP, catch-all to legacy, new app handles no business routes yet
+
+**Decision:** `src-core/NerdDinner.Proxy` is a new ASP.NET Core (.NET 10)
+minimal-API project, added to `NerdDinner.sln` alongside `src\NerdDinner.csproj`
+(SDK-style and classic-style projects coexist in the same solution file
+without issue). It references `Yarp.ReverseProxy` 2.3.0, configured via
+`appsettings.json`'s `ReverseProxy` section rather than code: a single
+catch-all route (`/{**catch-all}`) forwards every request to a
+`legacyCluster` destination pointed at the legacy app's IIS Express
+binding (`http://localhost:10581/`, per `src\Properties\PublishProfiles`'s
+`IISUrl` and `.vs\NerdDinner\config\applicationhost.config`'s `NerdDinner`
+site binding — checked directly rather than assumed). The new app's only
+locally-handled endpoint is `GET /_proxy/health`, a diagnostic check
+proving the new app itself is reachable through the proxy — explicitly
+not a migrated business route, so it doesn't compromise M7's "new app
+handles no routes" acceptance criterion. No route to the new app exists
+for any real NerdDinner path yet; that starts at M8.
+
+**Verified live, not just built:** both apps were actually started
+(legacy app via `iisexpress.exe` against the existing
+`applicationhost.config`, new app via `dotnet run`) and exercised
+through the single proxy entry point (`localhost:5021`) —
+`GET /_proxy/health` returned the new app's own text,
+`GET /` and `GET /Dinners` both returned `200` with the legacy app's
+actual page title (`Nerd Dinner`), confirming YARP is really forwarding
+to the legacy app rather than the config merely parsing without error.
+Both processes were stopped after verification; nothing was left
+running.
+
+**Reasoning:** Config-driven YARP routes (over code-configured routes)
+keep the routing table declarative and easy to extend milestone-by-
+milestone (M8 adds `Home`/`Search` routes to a new cluster, M9 adds
+`Dinners`/`RSVP`, etc. — each an addition to `appsettings.json`, not a
+structural change to `Program.cs`). Putting the new project under
+`src-core/` (a solution folder, not a physical parent of `src/`) keeps
+it clearly separate from the Phase 1 legacy tree while living in the
+same repo and solution, consistent with DL-003's two-separate-processes
+approach.
+
+**Status:** Adopted.

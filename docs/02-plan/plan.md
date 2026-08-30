@@ -192,15 +192,23 @@ hardest part is attempted.
 
 ### M7 — Reverse proxy scaffold
 
+**Status: complete and verified.** See `decision-log.md` DL-020.
+
 **Acceptance criteria:**
 - A new ASP.NET Core (.NET 10) project exists alongside the Phase-1
-  application.
+  application. **Done** — `src-core/NerdDinner.Proxy`.
 - A reverse proxy (YARP or equivalent) routes requests by path between
   the legacy app and the new app, with the new app currently handling no
   routes (proves the routing infrastructure works before migrating
-  anything).
+  anything). **Done** — YARP catch-all route forwards everything to the
+  legacy app; the new app's only local endpoint is a diagnostic
+  `/_proxy/health` check, not a migrated business route.
 - Both apps run and are reachable through the single proxy entry point
-  locally.
+  locally. **Done** — verified live: legacy app under IIS Express
+  (`localhost:10581`) and the new app (`localhost:5021`) both running,
+  with `localhost:5021/` and `localhost:5021/Dinners` proxied through to
+  the legacy app (200, correct page title) and `localhost:5021/_proxy/health`
+  answered directly by the new app.
 
 ### M8 — Migrate stateless/read-only routes
 
