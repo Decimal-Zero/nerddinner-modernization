@@ -55,21 +55,24 @@ namespace NerdDinner.Proxy.Tests
         }
 
         [Fact]
-        public async System.Threading.Tasks.Task UnmigratedRoute_IsForwardedToTheLegacyApp()
+        public async System.Threading.Tasks.Task GlimpseAxd_IsStillForwardedToTheLegacyApp()
         {
             var client = _factory.CreateClient();
 
-            // /Dinners was the unmigrated route this test used at M8 --
-            // M9 migrated Dinners/RSVP/Search (decision-log.md DL-028), so
-            // this test moved to /Account/Login, still genuinely
-            // unmigrated until M10 (Migrate Auth). Deliberate update to an
-            // existing test reflecting real, intended behavior change, per
-            // DL-004 -- not silently patched to keep passing.
-            var response = await client.GetAsync("/Account/Login");
-            var body = await response.Content.ReadAsStringAsync();
+            // /Dinners (M8), then /Account/Login (M9) were this test's
+            // targets in turn, each migrated out from under it by the
+            // next milestone. M10 migrated Account too (decision-log.md
+            // DL-029) -- every legacy controller (Home, Dinners, RSVP,
+            // Search, Account) is now served by the new app, so there's
+            // no more unmigrated *feature* route left to prove the
+            // fallback against. glimpse.axd is genuinely legacy-only and
+            // staying that way -- flagged for removal at M11 (DL-019), not
+            // ported -- so it's still a real, honest target for "the YARP
+            // catch-all still reaches the legacy app," not a route this
+            // test will need to chase again next milestone.
+            var response = await client.GetAsync("/glimpse.axd");
 
             Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
-            Assert.Contains("Version: 1.0", body);
         }
 
         [Fact]

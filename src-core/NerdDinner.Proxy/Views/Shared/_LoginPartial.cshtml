@@ -1,7 +1,21 @@
-@* Always renders logged-out. This app doesn't share the legacy app's OWIN
-   authentication cookie yet — cross-app session handling is M10's job
-   (Migrate Auth), not M8's. See decision-log.md DL-022. *@
-<ul>
-    <li><a href="~/Account/Register" id="registerLink">Register</a></li>
-    <li><a href="~/Account/Login" id="loginLink">Log in</a></li>
-</ul>
+@* M10 (decision-log.md DL-029) resolves the M8/DL-022 interim gap this
+   partial carried since it was rebuilt for the new app -- real
+   authentication state instead of an always-logged-out placeholder. *@
+@if (User.Identity.IsAuthenticated)
+{
+    <text>
+        Hello, <a asp-controller="Account" asp-action="Manage" class="username" title="Manage">@User.Identity.Name</a>!
+        @using (Html.BeginForm("LogOff", "Account", FormMethod.Post, new { id = "logoutForm" }))
+        {
+            @Html.AntiForgeryToken()
+            <a href="javascript:document.getElementById('logoutForm').submit()">Log off</a>
+        }
+    </text>
+}
+else
+{
+    <ul>
+        <li><a asp-controller="Account" asp-action="Register" id="registerLink">Register</a></li>
+        <li><a asp-controller="Account" asp-action="Login" id="loginLink">Log in</a></li>
+    </ul>
+}

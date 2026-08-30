@@ -77,11 +77,29 @@ if anything here conflicts with them, they win.
   Core routing limitation vs. classic Web API); `NerdDinner.js`'s URL
   contract unchanged. A real bug (`Point` needed to be nullable to match
   the legacy schema) found by an actual failed test insert, not by
-  inspection — see DL-028. New `ViewRenderingTests` use a fake auth
-  scheme to confirm the `[Authorize]`-gated Create/Edit views render
-  through the real MVC view engine, not just that the controller logic
-  returns the right model. 33/33 passing in `NerdDinner.Proxy.Tests`.
-  M10 (Migrate Auth) is next — see `plan.md`.
+  inspection — see DL-028. 33/33 passing in `NerdDinner.Proxy.Tests`.
+- **M10 (migrate Auth): complete and verified.** `AccountController` +
+  all Account views ported into `NerdDinner.Proxy`; ASP.NET Core
+  Identity replaces ASP.NET Identity 2.x/OWIN, pointed at a **freshly
+  created** `NerdDinner.Identity` database — unlike M9's Dinners table,
+  the old ASP.NET Identity 2.x schema genuinely isn't wire-compatible
+  with ASP.NET Core Identity's, found by an actual failed `Register`
+  POST (`Invalid column name 'NormalizedUserName'`). A second real bug
+  (`Dinner.RSVPs`'s non-nullable type made every Create/Edit POST fail
+  validation with "The RSVPs field is required," even though no view
+  posts it) needed both `[BindNever]` *and* `[ValidateNever]` —
+  `[BindNever]` alone was tried and confirmed insufficient by an actual
+  re-failed POST, not assumed. Every legacy controller (Home, Dinners,
+  RSVP, Search, Account) is now served by the new app — verified live,
+  the full loop: register → `_LoginPartial` shows logged in → a
+  completely different controller (`Dinners/Create`) recognizes the same
+  session and actually saves a dinner → logoff → access denied again.
+  New `AuthFlowTests` (`Category=Integration`) makes this permanent,
+  using `WebApplicationFactory`'s real cookie-aware client, not a fake
+  auth scheme — this directly satisfies M10's "session handling across
+  the proxy boundary... explicitly tested, not assumed" acceptance
+  criterion. See DL-029. 40/40 passing in `NerdDinner.Proxy.Tests`.
+  M11 (decommission legacy app) is next — see `plan.md`.
 - **Visual Studio Test Explorer AppDomain fix (DL-023 through DL-026):**
   `NerdDinner.Tests` run fine via CLI `vstest.console.exe` but had ~29
   failures inside VS's own Test Explorer, all one root cause showing up

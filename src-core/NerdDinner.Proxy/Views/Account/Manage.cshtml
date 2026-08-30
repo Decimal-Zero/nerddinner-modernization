@@ -1,0 +1,33 @@
+@model LocalPasswordModel
+@{
+    ViewBag.Title = "Manage Account";
+}
+
+<hgroup class="title">
+    <h1>@ViewBag.Title.</h1>
+</hgroup>
+
+<p class="message-success">@ViewBag.StatusMessage</p>
+
+<p>You're logged in as <strong>@User.Identity.Name</strong>.</p>
+
+@if (ViewBag.HasLocalPassword)
+{
+    @await Html.PartialAsync("_ChangePasswordPartial")
+}
+else
+{
+    @await Html.PartialAsync("_SetPasswordPartial")
+}
+
+<section id="externalLogins">
+    @await Component.InvokeAsync("RemoveExternalLogins")
+
+    <h3>Add an external login</h3>
+    @await Component.InvokeAsync("ExternalLoginsList", new { returnUrl = ViewBag.ReturnUrl })
+</section>
+
+@section Scripts {
+    <script src="~/Scripts/jquery.validate.min.js"></script>
+    <script src="~/Scripts/jquery.validate.unobtrusive.js"></script>
+}

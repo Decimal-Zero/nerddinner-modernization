@@ -1376,3 +1376,163 @@ Dinner") redirect-loop-to-legacy-login behavior was confirmed live and
 matched this entry's documented M10 gap exactly, with no surprises.
 
 **Status:** Adopted.
+
+---
+
+### DL-029 — M10: Account migrated to `NerdDinner.Proxy`; ASP.NET Core Identity replaces ASP.NET Identity 2.x/OWIN
+
+**Decision:** `AccountController` and all its views/partials are now
+implemented for real inside `src-core/NerdDinner.Proxy`, backed by
+ASP.NET Core Identity (`Microsoft.AspNetCore.Identity.EntityFrameworkCore`)
+in place of ASP.NET Identity 2.x + OWIN. `ApplicationUser`/`ApplicationDbContext`
+mirror the legacy shape; the legacy app's `[ChildActionOnly]` actions
+(`ExternalLoginsList`, `RemoveExternalLogins`) became View Components
+(`ExternalLoginsListViewComponent`, `RemoveExternalLoginsViewComponent`)
+— ASP.NET Core MVC's replacement for classic MVC's child actions.
+`AccountController.ChallengeResult` (a hand-rolled `ActionResult`
+wrapping OWIN's `Authentication.Challenge`) is gone; ASP.NET Core MVC
+ships `ControllerBase.Challenge(...)` natively. The four external OAuth
+providers (Google, Microsoft, Twitter, Facebook) are wired up with the
+same conditional-on-non-empty-secret pattern as the legacy
+`Startup.Auth.cs` — none are configured in this dev environment (all
+ship blank in `appsettings.json`, matching the legacy `Web.config`),
+so these flows are structurally ported but not live-tested, same
+documented limitation the legacy suite already had.
+
+**A real, live-discovered schema incompatibility, not caught by
+reasoning:** the shared `NerdDinner.Identity` LocalDB database (which
+`NerdDinnerCoreContext`'s M9 precedent suggested reusing as-is) was
+created by the legacy app's ASP.NET Identity 2.x/EF6 schema
+(`LockoutEndDateUtc` as `DateTime`, no `NormalizedUserName`/
+`NormalizedEmail`/`ConcurrencyStamp`). ASP.NET Core Identity's own
+schema is a real superset with different columns — unlike M9's Dinners
+table, these two are not wire-compatible. Found by an actual failed
+`Register` POST (`SqlException: Invalid column name 'NormalizedUserName'`),
+not by inspecting the schema in advance. The existing database had
+exactly one user row — consistent with DL-014's identical M4 finding
+("no real user data in this practice project"), so rather than
+hand-migrate a schema for data not worth preserving, `NerdDinner.Identity`
+was dropped (`DROP DATABASE`, confirmed with the user first given its
+destructive nature) and `ApplicationDbContext.Database.EnsureCreated()`
+now builds the correct ASP.NET Core Identity schema fresh at startup —
+same "no formal migrations, no seed data needed" reasoning DL-018
+already used for `DefaultConnection` in the legacy app.
+
+**A second real bug, also only found by an actual failed POST:**
+`Dinner.RSVPs` (declared as non-nullable `ICollection<RSVP>`,
+deliberately not default-initialized since M9/DL-028, to preserve the
+characterized `IsUserRegistered` NRE-on-null behavior) made every
+`Dinners/Create` and `Dinners/Edit` POST fail ModelState validation
+with "The RSVPs field is required" — under `<Nullable>enable</Nullable>`,
+ASP.NET Core MVC's automatic model validation treats a non-nullable
+reference-type property as implicitly required, even though no view
+ever posts an "RSVPs" field (it's set server-side in the controller).
+This surfaced only once M10 made it possible to actually complete an
+authenticated POST for the first time — M9's own `DinnersControllerTests`
+never caught it because those tests call the controller action directly
+(bypassing MVC's model-binding/validation pipeline entirely), and the
+one live `curl` verification M9 did (DL-028) never exercised a
+successful Create POST specifically, only GETs and Search's read paths.
+Fixed with `[BindNever]` (stop MVC from trying to populate `RSVPs` from
+posted data) *and* `[ValidateNever]` (stop MVC from separately flagging
+the still-null result as a validation error) — `[BindNever]` alone was
+tried first and confirmed insufficient by re-triggering the exact same
+failure, not assumed to be enough.
+
+**Verified live, the actual full loop, not just unit-level:** registered
+a real user via HTTP POST to `/Account/Register`, confirmed `_LoginPartial`
+correctly showed the authenticated state (finally resolving the
+M8-era/DL-022 always-logged-out placeholder for real), confirmed
+`/Dinners/Create` — a completely different, `[Authorize]`-gated
+controller — recognized the same session and rendered the real form
+(not a redirect to legacy's login page), submitted a real dinner and
+confirmed it landed in the shared dev database, confirmed `Details`
+correctly showed "You are the host," logged off, and confirmed
+`/Dinners/Create` correctly redirected to login again afterward. Test
+data cleaned up from the shared dev database after verification.
+
+**Testing:**
+- `AccountControllerIdentityTests` (ported from the legacy suite):
+  registration success/duplicate-rejection/short-password-rejection,
+  password check success/failure, against a dedicated
+  `NerdDinnerProxyIdentityTests` LocalDB catalog (own
+  `ProxyIdentityTestDatabaseFixture`, separate from both the shared dev
+  `NerdDinner.Identity` and `NerdDinnerCoreContext`'s test database) —
+  built via a real DI container running the exact same `AddIdentity(...)`
+  configuration `Program.cs` uses, rather than hand-constructing
+  `UserManager` (whose real constructor has several required
+  collaborators easy to get subtly wrong by hand).
+- New `AuthFlowTests` (`Category=Integration`): real end-to-end HTTP
+  through `WebApplicationFactory`'s cookie-aware default client (no fake
+  auth scheme) — `RegisteredUser_SessionIsRecognized_ByADifferentAlreadyMigratedController`
+  is the direct, permanent test of M10's "session handling... explicitly
+  tested, not assumed" acceptance criterion;
+  `EditView_RendersForRealOwner_AfterRealCreateAndOwnershipCheck`
+  supersedes M9's fake-auth-scheme `ViewRenderingTests` (retired here —
+  it doesn't compose cleanly with ASP.NET Core Identity's own scheme
+  setup, confirmed by an actual failing run, not assumed);
+  `UnauthenticatedRequest_ToProtectedRoute_RedirectsToLogin` confirms the
+  negative case.
+- `HomeRoutingTests.UnmigratedRoute_IsForwardedToTheLegacyApp` (M8),
+  moved to `/Account/Login` (M9), is retired again -- renamed
+  `GlimpseAxd_IsStillForwardedToTheLegacyApp` and pointed at
+  `glimpse.axd`, since every legacy *feature* route is now migrated and
+  `glimpse.axd` is genuinely legacy-only, staying that way until M11
+  removes it entirely (DL-019) — the first target for this test that
+  won't need chasing again next milestone.
+
+All new/updated tests pass: 40/40 in `NerdDinner.Proxy.Tests`. The
+legacy `NerdDinner.Tests` suite is untouched by this milestone (no
+`src/` files modified) and remains at 83/83 per DL-023 through DL-026.
+
+**Status:** Adopted.
+
+---
+
+### DL-030 — Documented gap: Bing Maps' free tier is retired; a modern replacement (Azure Maps or similar) was never surfaced by the original assessment or M1
+
+**Decision:** Not fixed now. Logged as a known, deliberately deferred
+gap — the app already tolerates it gracefully (a `Dinner` with no
+`Location` is legal by the model's own contract, no `[Required]`
+attribute; see DL-015/DL-028's characterized behavior for exactly this
+case). No milestone in `plan.md` (M1–M11) currently owns replacing the
+mapping provider.
+
+**Context:** Found live, not by inspection: creating a dinner through
+`NerdDinner.Proxy`'s Create form saves it with `Location = NULL`
+because the client-side Bing Maps control (`NerdDinner.js`'s
+`Microsoft.Maps` API calls: `LoadMap`, `LoadPin`, `GetCenter`,
+`SetZoomLevel`, wired up via `_Layout.cshtml`'s
+`mapcontrol.ashx`-sourced `<script>` tag) never successfully geocodes
+an address without a working Bing Maps key — and free Bing Maps keys
+are no longer obtainable at all; Microsoft retired that tier in favor
+of Azure Maps. `SearchController.JsonDinnerFromDinner`'s already-
+characterized NRE-on-null-`Location` bug (DL-028) is what actually
+surfaces this to a user: visiting the front page after creating an
+un-geocoded dinner throws, because `NerdDinner.FindMostPopularDinners`
+calls `POST api/Search` unconditionally.
+
+**Why this wasn't caught earlier, worth recording as a real process
+gap:** M1's dependency research (`m1-dependency-research.md`) audited
+`packages.config` — NuGet package dependencies — and correctly caught
+other stale/retired dependencies that way (DotNetOpenAuth, jQuery,
+X.PagedList, per DL-009/DL-014). The Bing Maps AJAX Control was never a
+NuGet package; it's a directly-referenced external script tag and
+hosted service, invisible to a packages-manifest audit. Grepped both
+`assessment.md` and `m1-dependency-research.md` directly to confirm
+neither mentions Bing Maps at all, rather than assuming the gap.
+**Lesson for future assessments of this kind:** dependency research
+needs to explicitly include externally-loaded scripts/services
+referenced directly in views/layouts, not just what's declared in a
+package manifest — a category of dependency this engagement's process
+didn't have a checklist item for.
+
+**Replacement direction, if/when this gets scoped as real work:** Azure
+Maps was identified as the natural target (same Microsoft ecosystem as
+the rest of this modernization) over Google Maps. Real scope, not a
+config swap: `NerdDinner.js`'s `Microsoft.Maps`-API calls would need a
+genuine rewrite against Azure Maps' JS SDK (`atlas.Map`, a different API
+shape), touching every view that renders a map (`Home/Index`,
+`Dinners/Create`, `Dinners/Edit`, the `LocationDetail` templates).
+
+**Status:** Adopted (as a documented, deferred gap — not a fix).

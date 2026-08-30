@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using NetTopologySuite.Geometries;
 
 namespace NerdDinner.Proxy.Models
@@ -65,6 +67,24 @@ namespace NerdDinner.Proxy.Models
         // on a freshly-constructed Dinner with no RSVPs loaded yet is a
         // characterized behavior (NerdDinner.Tests DinnerTests
         // .IsUserRegistered_ThrowsNullReferenceException_WhenRSVPsIsNull).
+        //
+        // [BindNever]: RSVPs is never posted from a Create/Edit form (it's
+        // set server-side in DinnersController.Create). [ValidateNever]:
+        // required in addition -- [BindNever] alone stops MVC from
+        // *populating* this property from posted data, but the property
+        // then stays null, and ASP.NET Core MVC's validation step
+        // separately flags any non-nullable reference-type property as
+        // implicitly required under <Nullable>enable</Nullable>
+        // regardless of whether binding was attempted, rejecting every
+        // Create POST with "The RSVPs field is required." even after
+        // adding [BindNever] alone -- confirmed by an actual failed Create
+        // submission both before and after that first fix (M10,
+        // decision-log.md DL-029), the same class of implicit-nullability
+        // surprise DL-028 hit for Point/Location in M9 -- there it was a
+        // required database column, here it's an unwanted required form
+        // field.
+        [BindNever]
+        [ValidateNever]
         public virtual ICollection<RSVP> RSVPs { get; set; }
 
         public bool IsHostedBy(string userName)

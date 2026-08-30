@@ -281,17 +281,47 @@ fit here than split off with the stateless routes.
   — same logic, ported verbatim; characterized via both direct
   controller tests (`EditGet_ReturnsInvalidOwnerView_WhenCurrentUserIsNotHost`,
   etc.) and a real-HTTP test confirming the actual Edit view renders for
-  the correct owner (`ViewRenderingTests.DinnersEdit_RendersWithoutError_ForHostUser`).
+  the correct owner. That real-HTTP test was originally
+  `ViewRenderingTests.DinnersEdit_RendersWithoutError_ForHostUser` (a
+  fake auth scheme, M9); M10 retired it in favor of
+  `AuthFlowTests.EditView_RendersForRealOwner_AfterRealCreateAndOwnershipCheck`,
+  which exercises the identical concern through real registration/login
+  instead — see DL-029.
 
 ### M10 — Migrate Auth (highest risk, migrated last)
+
+**Status: complete and verified.** See `decision-log.md` DL-029.
 
 **Acceptance criteria:**
 - `Account` routes and all authentication (including any OAuth providers
   carried forward) are served by the ASP.NET Core app using ASP.NET Core
-  Identity.
+  Identity. **Done** — `AccountController` + all Account views ported
+  into `NerdDinner.Proxy`; local username/password login, registration,
+  and logoff are live-tested. The four external OAuth providers
+  (Google, Microsoft, Twitter, Facebook) are structurally ported with
+  the same conditional-on-configured-secret wiring as the legacy app,
+  but stay untested at the live level — no provider secrets are
+  configured in this dev environment, same limitation the legacy app's
+  own test suite already had.
 - Login, registration, and external login characterization tests pass.
+  **Done for login/registration/logoff** —
+  `AccountControllerIdentityTests` (ported from the legacy suite) and
+  new `AuthFlowTests` (real end-to-end HTTP, see below). External login
+  flows remain uncharacterized at the live level, same documented gap
+  carried forward from the legacy suite (no OAuth secrets configured).
 - Session handling across the proxy boundary during the transition
-  period (if any) is explicitly tested, not assumed.
+  period (if any) is explicitly tested, not assumed. **Done, and the
+  answer turned out to be "no transition-period concern remains"** —
+  with `Account` migrated, every legacy controller (`Home`, `Dinners`,
+  `RSVP`, `Search`, `Account`) is now served by the new app, so there's
+  no cross-app session boundary left for a logged-in user to cross.
+  What M8/M9 documented as an interim gap (DL-022/DL-028: `[Authorize]`
+  never recognizing a real user) is resolved for real, verified live:
+  `AuthFlowTests.RegisteredUser_SessionIsRecognized_ByADifferentAlreadyMigratedController`
+  registers a user via `AccountController` and confirms the SAME session
+  is recognized by `DinnersController.Create` — a genuinely different
+  controller — through real ASP.NET Core Identity cookie auth, not a
+  fake scheme.
 
 ### M11 — Decommission legacy app
 
@@ -308,6 +338,15 @@ fit here than split off with the stateless routes.
   here rather than left to happen implicitly when the legacy Framework
   app is deleted, so it can't quietly get missed a second time.
 - Full characterization suite passes against the final, sole application.
+
+**Not in scope for M11, deliberately:** replacing Bing Maps (its free
+tier is retired) with a working mapping provider such as Azure Maps —
+a real gap in the modernized app, but not one any milestone in this
+plan currently owns. Documented as a deferred finding, with a note on
+why the original assessment/M1 never caught it, in `decision-log.md`
+DL-030. The app already degrades gracefully without it (a `Dinner` with
+no geocoded `Location` is legal), so it doesn't block decommissioning
+the legacy app — it's a follow-up modernization item, not a blocker.
 
 ---
 
