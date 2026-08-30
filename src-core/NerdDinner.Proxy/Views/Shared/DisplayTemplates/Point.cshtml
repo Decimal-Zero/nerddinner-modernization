@@ -1,0 +1,6 @@
+@model NetTopologySuite.Geometries.Point
+@if (Model != null) {
+  @Html.Hidden("", Model.Y + "," + Model.X, new { @class = "display-for-dbgeography", disabled = true })
+} else {
+  @Html.Hidden("", "n/a", new { disabled = true })
+}

@@ -1,0 +1,6 @@
+@model NetTopologySuite.Geometries.Point
+@if (Model != null) {
+  @Html.Hidden("", Model.Y + "," + Model.X, new { @class = "editor-for-dbgeography" })
+} else {
+  @Html.Hidden("", "", new { @class = "editor-for-dbgeography" })
+}

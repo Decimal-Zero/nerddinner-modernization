@@ -59,14 +59,47 @@ namespace NerdDinner.Proxy.Tests
         {
             var client = _factory.CreateClient();
 
-            // /Dinners hasn't been migrated (that's M9) -- this proves the
-            // proxy's fallback path still genuinely reaches the legacy app,
-            // not just that the new app's own routes work.
-            var response = await client.GetAsync("/Dinners");
+            // /Dinners was the unmigrated route this test used at M8 --
+            // M9 migrated Dinners/RSVP/Search (decision-log.md DL-028), so
+            // this test moved to /Account/Login, still genuinely
+            // unmigrated until M10 (Migrate Auth). Deliberate update to an
+            // existing test reflecting real, intended behavior change, per
+            // DL-004 -- not silently patched to keep passing.
+            var response = await client.GetAsync("/Account/Login");
             var body = await response.Content.ReadAsStringAsync();
 
             Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
             Assert.Contains("Version: 1.0", body);
+        }
+
+        [Fact]
+        public async System.Threading.Tasks.Task DinnersIndex_IsServedByTheNewApp_NotProxied()
+        {
+            var client = _factory.CreateClient();
+
+            var response = await client.GetAsync("/Dinners");
+            var body = await response.Content.ReadAsStringAsync();
+
+            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+            Assert.Contains("Upcoming Dinners", body);
+            Assert.Contains("Version: Phase 2 (ASP.NET Core)", body);
+        }
+
+        [Fact]
+        public async System.Threading.Tasks.Task SearchApi_IsServedByTheNewApp_NotProxied()
+        {
+            var client = _factory.CreateClient();
+
+            // POST api/Search?limit=... is NerdDinner.js's own call shape
+            // (NerdDinner.FindMostPopularDinners) -- confirms the new
+            // app's Search route responds with well-formed JSON rather
+            // than the legacy app's response (which would also return
+            // 200, so status code alone wouldn't distinguish them).
+            var response = await client.PostAsync("/api/Search?limit=5", null);
+            var body = await response.Content.ReadAsStringAsync();
+
+            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+            Assert.StartsWith("[", body.Trim());
         }
 
         [Fact]

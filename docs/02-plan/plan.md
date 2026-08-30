@@ -239,10 +239,14 @@ split across two milestones by data-access technology mid-migration.
   (via the proxy, exercising the real routing path — not the new app in
   isolation). **Done** — `NerdDinner.Proxy.Tests` (new project) hosts the
   real proxy app via `WebApplicationFactory` and asserts against actual
-  HTTP responses, including confirming `/Dinners` (unmigrated) still
-  reaches the legacy app through the same running instance.
+  HTTP responses. Originally confirmed via `/Dinners` (unmigrated at the
+  time) reaching the legacy app through the same running instance; that
+  assertion moved to `/Account/Login` once M9 migrated `Dinners` — see
+  DL-028.
 
 ### M9 — Migrate Dinners, RSVP, and Search (CRUD + spatial data)
+
+**Status: complete and verified.** See `decision-log.md` DL-028.
 
 `Search` folded in from M8's original scope — see DL-021. It shares
 this milestone's exact data-layer concern (spatial queries against
@@ -251,7 +255,11 @@ fit here than split off with the stateless routes.
 
 **Acceptance criteria:**
 - `Dinners`, `RSVP`, and `Search` routes are served by the ASP.NET Core
-  app.
+  app. **Done** — all three controllers ported into `NerdDinner.Proxy`;
+  `Search`'s two GET actions (by lat/long, by place name/zip) folded into
+  one dispatching action to work around an ASP.NET Core routing
+  limitation classic Web API didn't have (DL-028) — externally, the URL
+  contract NerdDinner.js depends on is unchanged.
 - EF Core data access replaces EF6; `Dinner.Location` uses a
   NetTopologySuite-based spatial type in place of `DbGeography`, with
   behavior verified against characterization tests covering location
@@ -259,8 +267,21 @@ fit here than split off with the stateless routes.
   as the easiest migration detail to miss). `Search`'s spatial query
   (`FindByLocation`) is the first real exercise of this new data layer,
   not `Dinners`/`RSVP` — worth verifying in that order given the
-  dependency.
-- Ownership-check logic (`IsHostedBy`) is preserved and tested.
+  dependency. **Done** — verified live against the actual shared dev
+  database (not just reasoned about): EF Core + NetTopologySuite
+  correctly read the existing `geography` column data the legacy EF6
+  Migrations created, and a spatial `.Distance()` query correctly
+  translates to SQL Server's `STDistance` and filters by real distance.
+  New tests exercise this directly (`SearchByLocation_FindsNearbyDinner_WithinDistanceThreshold`,
+  `..._ExcludesDinner_OutsideDistanceThreshold`,
+  `..._ReturnsCorrectCoordinates_ForMatchedDinner`) — coverage the legacy
+  suite could never have, since its `GeolocationService` had no
+  dependency-injection seam to test around.
+- Ownership-check logic (`IsHostedBy`) is preserved and tested. **Done**
+  — same logic, ported verbatim; characterized via both direct
+  controller tests (`EditGet_ReturnsInvalidOwnerView_WhenCurrentUserIsNotHost`,
+  etc.) and a real-HTTP test confirming the actual Edit view renders for
+  the correct owner (`ViewRenderingTests.DinnersEdit_RendersWithoutError_ForHostUser`).
 
 ### M10 — Migrate Auth (highest risk, migrated last)
 

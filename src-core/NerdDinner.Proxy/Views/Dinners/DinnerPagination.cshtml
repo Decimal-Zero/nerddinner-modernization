@@ -1,0 +1,26 @@
+@model IPagedList<Dinner>
+<div class="pagination">
+    @if (!Model.IsFirstPage)
+    {
+        <span class="page-link">
+            <a asp-action="Index" asp-route-page="1">&lt;&lt;</a></span>
+    }
+    @if (Model.HasPreviousPage)
+    {
+        <span class="page-link">
+            <a asp-action="Index" asp-route-page="@(Model.PageNumber - 1)">&lt; Prev</a></span>
+    }
+    @if (Model.HasNextPage)
+    {
+        <span class="page-link">
+            <a asp-action="Index" asp-route-page="@(Model.PageNumber + 1)">Next &gt;</a></span>
+    }
+    @if (!Model.IsLastPage)
+    {
+        <span class="page-link">
+            <a asp-action="Index" asp-route-page="@Model.PageCount">&gt;&gt;</a></span>
+    }
+    <div class="info">
+        <i>Page @(Model.PageCount < Model.PageNumber ? 0 : Model.PageNumber) of @Model.PageCount</i>
+    </div>
+</div>

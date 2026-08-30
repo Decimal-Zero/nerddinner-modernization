@@ -1234,3 +1234,145 @@ scheduled for a rewrite.
 **Status:** Adopted. Revisit at M9: give `GeolocationService`'s ASP.NET
 Core replacement real constructor-injected configuration from the start,
 rather than porting forward the optional-parameter pattern.
+
+---
+
+### DL-028 — M9: Dinners, RSVP, and Search ported to `NerdDinner.Proxy`; EF Core + NetTopologySuite replaces EF6 + DbGeography
+
+**Decision:** `DinnersController`, `RSVPController`, and `SearchController`
+are now implemented for real inside `src-core/NerdDinner.Proxy`, backed
+by a new EF Core `NerdDinnerCoreContext` pointed at the **same physical
+LocalDB database** (`NerdDinner`) the legacy app's EF6 `NerdDinnerContext`
+already uses — this is a strangler-fig cutover, not a data migration, so
+the existing schema (from `src/Migrations`) is reused as-is. `Dinner.Location`
+is `NetTopologySuite.Geometries.Point?` (nullable, matching the legacy
+schema's nullable `geography` column) instead of `DbGeography`, mapped
+via `Microsoft.EntityFrameworkCore.SqlServer.NetTopologySuite`.
+`Microsoft.EntityFrameworkCore.Proxies` + `UseLazyLoadingProxies()`
+restores EF6's default lazy-loading-on-`virtual`-navigation behavior, so
+action bodies port over close to verbatim (`db.Dinners.Find(id)` then
+touching `dinner.RSVPs` directly) rather than needing every call site
+rewritten to explicit `.Include(...)`.
+
+**Verified against the real shared database, not just reasoned about:**
+before writing any controller, a throwaway diagnostic endpoint confirmed
+EF Core + NTS correctly reads the existing seeded dinners (Seattle/
+Portland, SRID 4326) through the exact `geography` column the legacy
+EF6 Migrations created — then removed once confirmed. Later, application
+logs from a live run showed the real generated SQL, including
+`WHERE [d].[Location].STDistance(@sourcePoint) < 2000.0E0` — confirming
+the spatial `.Distance()` LINQ call genuinely translates to SQL Server's
+native geography operator, not merely that a query returns a plausible
+answer.
+
+**Search's route shape had to change internally, not externally:**
+classic ASP.NET Web API's action selector let `SearchByLocation`
+(GET, `latitude`/`longitude`) and `SearchByPlaceNameOrZip` (GET,
+`location`) coexist on the identical `api/Search` route, disambiguated
+by which query-string parameters were present. ASP.NET Core's router
+doesn't replicate that. Folded into one `[HttpGet] Get(...)` action that
+does the same dispatch explicitly. `NerdDinner.js`'s calls
+(`GET api/Search?location=...`, `POST api/Search?limit=...`) are
+byte-for-byte unchanged, so no client-side changes were needed —
+confirmed live via the proxy, not assumed.
+
+**JSON casing preserved deliberately:** the legacy `SearchController`
+never configured a camelCase contract resolver, so its Web API JSON
+formatter emitted PascalCase property names as declared
+(`Title`, `Url`, `RSVPCount`, etc.) — confirmed by checking
+`WebApiConfig.cs` directly rather than assuming ASP.NET Core's own
+default (camelCase) was safe to keep. `NerdDinner.js` (carried over
+unchanged since M8) binds to those exact PascalCase names, so
+`AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = null)`
+was necessary, not cosmetic.
+
+**A real bug found by an actual failed insert, not by reading the code:**
+the first version of `Dinner.Location` was declared as a non-nullable
+`Point` (matching the legacy C# property's apparent shape, which had no
+`?` either since `DbGeography` is itself a reference type with no
+compile-time nullability tracking under EF6). With
+`<Nullable>enable</Nullable>` on this project, EF Core's convention-based
+model building treats a non-nullable reference-type property as a
+*required* column — diverging from the legacy schema, where the
+`geography` column is nullable (no `nullable: false` in the original
+migration) and the model layer explicitly permits a dinner with no
+location (`SearchController.JsonDinnerFromDinner`'s characterized
+NRE-on-null-`Location` bug depends on exactly this being legal). Caught
+when `CreatePost_AddsDinnerWithHostAsFirstRSVP` failed with
+`Cannot insert the value NULL into column 'Location'` against the test
+database — fixed by declaring `Point? Location` instead.
+
+**Auth-gated actions (`Create`/`Edit`/`Delete`/RSVP `Register`) are a
+known, visible interim gap, same pattern as M8/DL-022:** this app
+doesn't share the legacy app's OWIN authentication cookie yet (that's
+explicitly M10's job). `[Authorize]` needs *some* configured scheme to
+challenge against or ASP.NET Core throws rather than redirecting — a
+minimal cookie scheme is registered so it redirects cleanly to
+`/Account/Login`, which still correctly falls through the YARP proxy to
+the legacy app's real login page (confirmed live), even though logging
+in there won't leave this app recognizing the user. Honest and visible,
+not silently broken.
+
+**`GeolocationService` ported with real constructor-injected
+configuration from the start** (`IConfiguration`/`IMemoryCache` via
+ASP.NET Core's built-in DI), per DL-027's explicit plan to do this
+properly here rather than carry forward the legacy app's
+`ConfigurationManager`-coupled, optional-parameter stopgap (DL-026).
+This also made something genuinely untestable in the legacy suite
+testable here: `SearchByLocation`'s spatial query needs no live network
+call (only `SearchByPlaceNameOrZip`'s geocoding path does), so — unlike
+`NerdDinner.Tests.Controllers.SearchControllerTests`, which documents
+this as an untestable gap — the new suite has real, network-free
+coverage of the distance query and the coordinate round-trip.
+
+**Pre-existing characterized bugs ported as-is, not fixed** (DL-004):
+`DinnersController.DeleteConfirmed` and `RSVPController.RegisterForDinner`
+(via `Register`) still throw unhandled `NullReferenceException` for a
+nonexistent id, same as the legacy app — both re-characterized directly
+against the new controllers.
+
+**Testing, three layers:**
+1. `NerdDinner.Proxy.Tests/Controllers/*` — direct controller
+   instantiation + a fake-`ClaimsPrincipal` `SetFakeUser` helper (same
+   philosophy as the legacy suite's `ControllerTestHelpers`), against a
+   dedicated `NerdDinnerProxyTests` LocalDB catalog (separate from both
+   the legacy suite's `NerdDinnerTests` and the shared dev `NerdDinner`
+   database) created/dropped per run via `EnsureDeleted`/`EnsureCreated`.
+2. `HomeRoutingTests` extended to confirm `Dinners`/`Search` are now
+   genuinely served by the new app (not proxied) through the real
+   routing path, and its `UnmigratedRoute_IsForwardedToTheLegacyApp`
+   test moved from `/Dinners` (now migrated) to `/Account/Login` (still
+   genuinely unmigrated) — a deliberate update to reflect real changed
+   behavior, per DL-004, not a silent patch to keep it passing.
+3. New `ViewRenderingTests`, using a fake `TestAuthHandler` authentication
+   scheme (a standard ASP.NET Core testing pattern) through a real
+   `WebApplicationFactory` HTTP request — confirms the `[Authorize]`-gated
+   `Create`/`Edit` views actually render through the real MVC view engine
+   and `EditorTemplates` (`Point`, `LocationDetail`, `CountryDropDown`)
+   for an authenticated user, a gap the controller-level tests can't
+   cover since they never invoke the view engine.
+
+All three layers pass: 33/33 in `NerdDinner.Proxy.Tests`
+(`Category=Integration` tests run against the live legacy app, same
+convention as M8); the legacy `NerdDinner.Tests` suite is untouched by
+this milestone (no `src/` files modified) and remains at 83/83 per
+DL-023 through DL-026.
+
+**Confirmed end to end by the user, beyond what this session could
+verify itself:** a `NerdDinner.Proxy`-specific `secrets.json` (own
+`UserSecretsId`, separate from the legacy app's per DL-013) was
+configured locally with a real GeoNames username, confirming
+`SearchByPlaceNameOrZip`'s live geocoding path — untested by this
+session since the automated suite deliberately doesn't depend on a
+locally-configured secret, same convention as the legacy app's
+GeoNames integration tests. Separately, a dinner created without a
+geocoded `Location` (no Bing Maps key configured locally) reproduced
+the characterized `JsonDinnerFromDinner` NRE live against real data —
+removed directly from the shared dev database (`DELETE` by `DinnerID`,
+confirmed via `sqlcmd` before and after) rather than through the app,
+since the bug being characterized is exactly "no way to clean this up
+through the UI." The `[Authorize]`-gated `Dinners/Create` ("Host
+Dinner") redirect-loop-to-legacy-login behavior was confirmed live and
+matched this entry's documented M10 gap exactly, with no surprises.
+
+**Status:** Adopted.

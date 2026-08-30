@@ -1,0 +1,52 @@
+@model Dinner
+<script type="text/javascript">
+
+	function AnimateRSVPMessage() {
+		$("#rsvpmsg").animate({ fontSize: "1.5em" }, 400);
+	}
+
+	// Replaces the legacy app's Ajax.ActionLink/AjaxOptions (Microsoft
+	// jQuery Unobtrusive AJAX helpers, part of System.Web.Mvc -- no
+	// ASP.NET Core equivalent ships in the box). Same behavior: POST,
+	// replace #rsvpmsg's content with the response body, then animate.
+	function PostAndUpdateRsvpMsg(url) {
+		$.post(url, {}, function (data) {
+			$("#rsvpmsg").html(data);
+			AnimateRSVPMessage();
+		});
+	}
+
+</script>
+<div id="rsvpmsg">
+	@if (User.Identity.IsAuthenticated)
+	{
+		if (Model.IsHostedBy(User.Identity.Name))
+		{
+
+		<p>
+			You are the host for this event!
+		</p>
+
+		}
+		else if (Model.IsUserRegistered(User.Identity.Name))
+		{
+
+		<p>
+			You are registered for this event!
+		</p>
+
+		<a href="javascript:void(0)" onclick="PostAndUpdateRsvpMsg('@Url.Action("CancelAjax", "RSVP", new { id = Model.DinnerID })')">Cancel your RSVP</a>
+
+		}
+		else
+		{
+
+		<a href="javascript:void(0)" onclick="PostAndUpdateRsvpMsg('@Url.Action("RegisterAjax", "RSVP", new { id = Model.DinnerID })')">RSVP for this event</a>
+
+		}
+	}
+	else
+	{
+		<a asp-controller="RSVP" asp-action="Register" asp-route-id="@Model.DinnerID">RSVP for this event</a>
+	}
+</div>

@@ -65,8 +65,23 @@ if anything here conflicts with them, they win.
   swallowing every request including literal paths (DL-022). New
   `NerdDinner.Proxy.Tests` project (`Category=Integration`, needs the
   legacy app running on `localhost:10581`) verifies real HTTP routing
-  through the proxy — 4/4 passing. M9 (migrate Dinners, RSVP, and
-  Search) is next — see `plan.md`.
+  through the proxy — 4/4 passing.
+- **M9 (migrate Dinners, RSVP, and Search): complete and verified.**
+  All three controllers ported into `NerdDinner.Proxy`; EF Core +
+  `Microsoft.EntityFrameworkCore.SqlServer.NetTopologySuite` replaces
+  EF6 + `DbGeography`, pointed at the **same** shared LocalDB database
+  (`NerdDinner`) the legacy EF6 schema created — verified live, not just
+  reasoned about: read the existing seeded spatial data correctly, and a
+  `.Distance()` query genuinely translates to SQL Server's `STDistance`.
+  `Search`'s two GET actions folded into one dispatching action (ASP.NET
+  Core routing limitation vs. classic Web API); `NerdDinner.js`'s URL
+  contract unchanged. A real bug (`Point` needed to be nullable to match
+  the legacy schema) found by an actual failed test insert, not by
+  inspection — see DL-028. New `ViewRenderingTests` use a fake auth
+  scheme to confirm the `[Authorize]`-gated Create/Edit views render
+  through the real MVC view engine, not just that the controller logic
+  returns the right model. 33/33 passing in `NerdDinner.Proxy.Tests`.
+  M10 (Migrate Auth) is next — see `plan.md`.
 - **Visual Studio Test Explorer AppDomain fix (DL-023 through DL-026):**
   `NerdDinner.Tests` run fine via CLI `vstest.console.exe` but had ~29
   failures inside VS's own Test Explorer, all one root cause showing up
