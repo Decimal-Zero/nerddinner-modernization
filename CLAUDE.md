@@ -67,10 +67,25 @@ if anything here conflicts with them, they win.
   legacy app running on `localhost:10581`) verifies real HTTP routing
   through the proxy — 4/4 passing. M9 (migrate Dinners, RSVP, and
   Search) is next — see `plan.md`.
-- Full suite: 80 passed, 0 skipped (`Category!=Integration` filter —
-  the GeoNames/ipinfodb Integration tests need your own locally-stored
-  GeoNames username, per DL-013, and aren't part of the default fast
-  run).
+- **Visual Studio Test Explorer AppDomain fix (DL-023 through DL-026):**
+  `NerdDinner.Tests` run fine via CLI `vstest.console.exe` but had ~29
+  failures inside VS's own Test Explorer, all one root cause showing up
+  four different ways — VS's IDE-hosted test AppDomain doesn't resolve
+  `AppDomain.CurrentDomain.BaseDirectory`/`ConfigurationManager` the way
+  code run under IIS or plain CLI assumes. Fixed via `Assembly.CodeBase`-
+  based path resolution for the native `SqlServerSpatial` DLL, explicit
+  connection-string/appSettings passing (new
+  `NerdDinner.Tests/TestSupport/TestConnectionStrings.cs` and
+  `TestAppSettings.cs`) threaded through additive constructor/parameter
+  overloads on `NerdDinnerContext`, `ApplicationDbContext`,
+  `DinnersController`, `RSVPController`, `SearchController`, and
+  `GeolocationService` — all additive, the running app's own behavior is
+  unchanged. Confirmed by the user directly in VS Test Explorer, full
+  suite green.
+- Full suite: 83 passed, 0 skipped, unfiltered — including the
+  GeoNames/ipinfodb `Category=Integration` tests, which need your own
+  locally-stored GeoNames username (DL-013) and aren't part of the
+  default fast run (`Category!=Integration` filter, 80 tests).
 
 Read `docs/01-assessment/assessment.md` for the full scored assessment
 this plan is built on, including the six-category "replace/rebuild

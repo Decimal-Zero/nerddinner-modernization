@@ -26,7 +26,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void Index_ExcludesPastDinners()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
 
             var result = controller.Index(page: null) as ViewResult;
             var model = (IPagedList<Dinner>)result.Model;
@@ -37,7 +37,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void Index_OrdersUpcomingDinnersByEventDateAscending()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
 
             var result = controller.Index(page: null) as ViewResult;
             var model = (IPagedList<Dinner>)result.Model;
@@ -54,7 +54,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void Details_ReturnsHttpNotFound_ForNonexistentId()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
 
             var result = controller.Details(id: 999999);
 
@@ -66,7 +66,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void CreateGet_PrefillsHostedByFromCurrentUser()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
             controller.SetFakeUser("alice");
 
             var result = controller.Create() as ViewResult;
@@ -78,7 +78,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void CreateGet_DefaultsEventDateToOneWeekFromNow()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
             controller.SetFakeUser("alice");
 
             var result = controller.Create() as ViewResult;
@@ -94,7 +94,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void CreatePost_ReturnsViewWithModel_WhenModelStateInvalid()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
             controller.SetFakeUser("alice");
             controller.ModelState.AddModelError("Title", "Title is required");
 
@@ -110,7 +110,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void EditGet_ReturnsInvalidOwnerView_WhenCurrentUserIsNotHost()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
             controller.SetFakeUser("bob");
 
             // "Alice's Dinner" is hosted by alice; find its id via a
@@ -125,7 +125,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void EditGet_ReturnsDinnerView_WhenCurrentUserIsHost()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
             controller.SetFakeUser("alice");
             int dinnerId = FindDinnerIdByTitle("Alice's Dinner");
 
@@ -138,7 +138,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void EditGet_ReturnsHttpNotFound_ForNonexistentId()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
             controller.SetFakeUser("alice");
 
             var result = controller.Edit(id: 999999);
@@ -151,7 +151,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void DeleteGet_ReturnsInvalidOwnerView_WhenCurrentUserIsNotHost()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
             controller.SetFakeUser("bob");
             int dinnerId = FindDinnerIdByTitle("Alice's Dinner");
 
@@ -171,7 +171,7 @@ namespace NerdDinner.Tests.Controllers
             // an unhandled NRE today rather than a clean 404. This is
             // exactly the kind of thing DL-004 says to capture honestly:
             // current (bad) behavior, not the behavior we'd prefer it had.
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
             controller.SetFakeUser("alice");
 
             Assert.Throws<NullReferenceException>(() => controller.DeleteConfirmed(id: 999999));
@@ -182,7 +182,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void WebSlicePopular_OrdersByRSVPCountDescending_AndExcludesPastDinners()
         {
-            var controller = new DinnersController();
+            var controller = new DinnersController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
 
             var result = controller.WebSlicePopular() as ViewResult;
             var model = (System.Collections.Generic.IEnumerable<Dinner>)result.Model;
@@ -201,7 +201,7 @@ namespace NerdDinner.Tests.Controllers
 
         private static int FindDinnerIdByTitle(string title)
         {
-            using (var db = new NerdDinnerContext())
+            using (var db = new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")))
             {
                 var dinner = System.Linq.Enumerable.First(db.Dinners, d => d.Title == title);
                 return dinner.DinnerID;

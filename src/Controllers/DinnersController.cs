@@ -12,7 +12,23 @@ namespace NerdDinner.Controllers
 {
     public class DinnersController : Controller
     {
-        private NerdDinnerContext db = new NerdDinnerContext();
+        private readonly NerdDinnerContext db;
+
+        public DinnersController() : this(new NerdDinnerContext())
+        {
+        }
+
+        // Lets tests supply their own NerdDinnerContext (e.g. one built
+        // with an explicit connection string via TestConnectionStrings)
+        // instead of relying on this class's own field initializer, which
+        // otherwise runs ConfigurationManager's ambient, name-based lookup
+        // -- unreliable under Visual Studio's IDE-hosted Test Explorer. See
+        // decision-log.md DL-025. The app itself always uses the
+        // parameterless constructor above; behavior is unchanged.
+        public DinnersController(NerdDinnerContext context)
+        {
+            db = context;
+        }
 
         //
         // GET: /Dinners/

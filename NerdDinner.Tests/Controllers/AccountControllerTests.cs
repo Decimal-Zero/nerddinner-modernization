@@ -49,7 +49,7 @@ namespace NerdDinner.Tests.Controllers
     {
         private static UserManager<ApplicationUser> CreateUserManager()
         {
-            var manager = new UserManager<ApplicationUser>(new UserStore<ApplicationUser>(new ApplicationDbContext()));
+            var manager = new UserManager<ApplicationUser>(new UserStore<ApplicationUser>(new ApplicationDbContext(TestConnectionStrings.Get("DefaultConnection"))));
 
             // Same policy AccountController's real ApplicationUserManager.Create
             // configures (App_Start/IdentityConfig.cs) -- matching

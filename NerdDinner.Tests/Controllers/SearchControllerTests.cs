@@ -21,7 +21,7 @@ namespace NerdDinner.Tests.Controllers
             // The one branch of this action testable without a live
             // network call -- it short-circuits before ever reaching
             // GeolocationService.
-            var controller = new SearchController();
+            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
 
             var result = controller.SearchByPlaceNameOrZip(location: "");
 
@@ -31,7 +31,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void SearchByPlaceNameOrZip_ReturnsNull_ForNullLocation()
         {
-            var controller = new SearchController();
+            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
 
             var result = controller.SearchByPlaceNameOrZip(location: null);
 
@@ -41,7 +41,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void GetMostPopularDinners_OrdersByRSVPCountDescending()
         {
-            var controller = new SearchController();
+            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
 
             var result = controller.GetMostPopularDinners(limit: 10).ToList();
 
@@ -60,7 +60,7 @@ namespace NerdDinner.Tests.Controllers
         [Fact]
         public void GetMostPopularDinners_ExcludesPastDinners()
         {
-            var controller = new SearchController();
+            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
 
             var result = controller.GetMostPopularDinners(limit: 10).ToList();
 
@@ -78,7 +78,7 @@ namespace NerdDinner.Tests.Controllers
             // serialized to JSON, rather than omitting coordinates or
             // filtering the dinner out. Characterized directly here via
             // GetMostPopularDinners, the code path that hits it.
-            using (var db = new NerdDinnerContext())
+            using (var db = new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")))
             {
                 db.Dinners.Add(new Dinner
                 {
@@ -94,7 +94,7 @@ namespace NerdDinner.Tests.Controllers
                 db.SaveChanges();
             }
 
-            var controller = new SearchController();
+            var controller = new SearchController(new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")));
 
             Assert.Throws<NullReferenceException>(() => controller.GetMostPopularDinners(limit: 10).ToList());
         }

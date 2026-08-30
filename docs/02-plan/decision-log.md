@@ -924,3 +924,313 @@ test harness doesn't spin up itself. Run against a real, separately
 started legacy app during this milestone: 4/4 passed.
 
 **Status:** Adopted.
+
+---
+
+### DL-023 — Pre-existing bug: `TestDatabaseFixture`/`DbGeographyModelBinderTests` resolved the native SqlServerSpatial DLL path incorrectly under VS Test Explorer
+
+**Decision:** `NerdDinner.Tests/TestSupport/TestDatabase.cs`
+(`TestDatabaseFixture.ctor`) and
+`NerdDinner.Tests/ModelBinders/DbGeographyModelBinderTests.cs` (static
+ctor) now resolve the directory they pass to
+`SqlServerTypes.Utilities.LoadNativeAssemblies` from
+`Assembly.CodeBase` (parsed as a URI, then `.LocalPath`), not
+`AppDomain.CurrentDomain.BaseDirectory`.
+
+**Context:** Unrelated to M7/M8 — a pre-existing bug from M3 (DL-010),
+surfaced by the user running the suite in Visual Studio and getting ~29
+failures spread across every DB-backed test class, all with the same
+underlying error (`Error loading msvcr120.dll (ErrorCode: 126)`) inside
+`TestDatabaseFixture`'s constructor. Because that fixture is shared
+across the whole "NerdDinner LocalDB collection" via `ICollectionFixture`,
+one failure in its constructor takes down every test in every class that
+depends on it at once — which is exactly the "spread across everything"
+symptom reported, not 29 independent bugs.
+
+**Root cause, found by the user attaching a debugger (not by this
+session guessing):** `LoadNativeAssemblies` builds its DLL path from
+whatever directory string it's given, per `Loader.cs`'s own doc comment
+distinguishing "`Server.MapPath(".")` for ASP.NET, `AppDomain.CurrentDomain.BaseDirectory`
+for desktop apps" — the test project is neither, and this call site
+(added in M3, DL-010) used the desktop-app convention. Under Visual
+Studio's IDE-hosted Test Explorer, `AppDomain.CurrentDomain.BaseDirectory`
+does **not** resolve to the test assembly's own `bin\Debug` — the user's
+debugger showed it resolving to
+`C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\Extensions\TestPlatform\`,
+the VSTest host's own install directory. `LoadNativeAssemblies` then
+built a path like `...\TestPlatform\SqlServerTypes\x64\msvcr120.dll`,
+which doesn't exist, and `LoadLibrary` correctly reported "module not
+found."
+
+**Two failed attempts before the real fix, recorded because they're
+instructive:**
+1. First fix attempt used `Assembly.Location` (the loaded assembly's
+   on-disk path) instead of `AppDomain.CurrentDomain.BaseDirectory`.
+   This fixed the exact case the user debugged, but a follow-up run via
+   `vstest.console.exe` from the command line (not the VS IDE) *still*
+   failed at the same line, now with a *third* different bad path.
+   Diagnostic instrumentation added temporarily to the fixture (then
+   removed) confirmed why: the VSTest xUnit adapter shadow-copies the
+   test assembly to a temp cache
+   (`...\Temp\<guid>\<guid>\assembly\dl3\...`), and `Assembly.Location`
+   reflects that copy's location, not the real one — a different failure
+   mode than the IDE case, but the same class of problem.
+2. That same diagnostic instrumentation printed `Assembly.CodeBase` and
+   `AppDomain.CurrentDomain.BaseDirectory` alongside `Assembly.Location`
+   for direct comparison. Under the CLI `vstest.console.exe` run,
+   `AppDomain.CurrentDomain.BaseDirectory` was actually *correct*
+   (unlike the IDE case) — confirming neither `Location` nor
+   `BaseDirectory` is reliable on its own across every way this suite
+   gets run, and that the earlier "reproduces fine via CLI" verification
+   (done before the user's VS-specific debugging) had been quietly
+   relying on a coincidence, not a fix.
+3. **What actually worked:** `Assembly.CodeBase` (a `file://` URI to the
+   assembly's real, original path, deliberately unaffected by shadow
+   copying) — confirmed correct in the same side-by-side diagnostic
+   output, and different from both `Location` and `BaseDirectory` in
+   that run. Re-verified with the diagnostic instrumentation removed:
+   full suite (`Category!=Integration`, 80 tests) passes via CLI
+   `vstest.console.exe`. Still needs confirmation from the user inside
+   Visual Studio's own Test Explorer, since that's the environment the
+   bug was originally reported in and CLI success alone was previously
+   shown to be an unreliable signal for this exact class of bug.
+
+**Reasoning:** `CodeBase` is the standard, documented escape hatch for
+exactly this "where is my assembly *really* on disk" question when a
+host might shadow-copy or otherwise relocate it — it isn't a workaround
+specific to this repo. Applied identically to both affected call sites
+(`Global.asax.cs`'s own call, added in M4/DL-014 for the running app,
+already correctly used `Server.MapPath("~/")` and needed no change).
+
+**Status:** Adopted, confirmed fixed inside Visual Studio's Test
+Explorer specifically — the user's next run progressed past this exact
+failure point (from `LoadNativeAssembly` at `TestDatabase.cs` line
+26/38, to `Database.Initialize` at line 57), which only happens if the
+native DLL genuinely loaded. See DL-024 for the different, second issue
+that surfaced once this one was actually fixed.
+
+---
+
+### DL-024 — Same class of VS Test Explorer AppDomain issue, second symptom: `ConfigurationManager` couldn't find connection strings that were right there in the compiled config
+
+**Decision:** `NerdDinnerContext` and `ApplicationDbContext` (both in
+`src/Models/`) gained an additive constructor overload taking a raw
+connection string directly
+(`NerdDinnerContext(string connectionString) : base(connectionString)`,
+`ApplicationDbContext(string connectionString) : base(connectionString, throwIfV1Schema: false)`),
+alongside their existing parameterless constructors (unchanged, still
+what the running app uses exclusively). A new
+`NerdDinner.Tests/TestSupport/TestConnectionStrings.cs` (internal
+static, cached) reads connection strings directly out of this test
+assembly's own compiled `NerdDinner.Tests.dll.config` via
+`ConfigurationManager.OpenMappedExeConfiguration`, using the same
+`Assembly.CodeBase`-derived path technique DL-023 established. Every
+`new NerdDinnerContext()` / `new ApplicationDbContext()` call site in
+`NerdDinner.Tests` (12 total, across `TestDatabase.cs`,
+`IdentityTestDatabase.cs`, `DinnersControllerTests.cs`,
+`RSVPControllerTests.cs`, `SearchControllerTests.cs`,
+`AccountControllerTests.cs`) now passes
+`TestConnectionStrings.Get("NerdDinnerContext")` /
+`TestConnectionStrings.Get("DefaultConnection")` explicitly instead.
+
+**Context:** Fixing DL-023 (native DLL loading) let the user's next VS
+Test Explorer run progress further, into a second, different failure at
+the same fixture's `db.Database.Initialize(force: true)` call:
+`No connection string named 'NerdDinnerContext' could be found in the
+application config file`. Same underlying theme as DL-023 — an AppDomain
+hosting mismatch specific to VS's IDE Test Explorer — but a different
+mechanism: `NerdDinnerContext()`'s parameterless constructor
+(`base("name=NerdDinnerContext")`) asks EF6 to resolve that name via
+`ConfigurationManager.ConnectionStrings`, which reads whatever config
+file the AppDomain's ambient `ConfigurationFile` setting points at.
+Confirmed directly (not assumed) that the actual compiled
+`NerdDinner.Tests\bin\Debug\NerdDinner.Tests.dll.config` file has the
+right connection string sitting right there — the problem is purely
+about which config file that AppDomain was actually pointed at, the same
+class of problem DL-023 already diagnosed for native DLL paths.
+
+**Alternative considered and rejected:** setting
+`AppDomain.CurrentDomain.SetData("APP_CONFIG_FILE", correctPath)` early,
+which forces `ConfigurationManager` to use a specific file — but only if
+set *before* `ConfigurationManager` is touched anywhere in that
+AppDomain for the first time. xUnit runs test collections in parallel by
+default, and this repo's non-DB-backed tests (e.g.
+`GeolocationServiceTests`, which reads `ConfigurationManager.AppSettings`
+directly) aren't in either DB-backed collection — a genuine race where
+an unrelated collection could touch and cache the wrong config before
+the DB fixture's constructor ever got a chance to override it. Reading
+the correct file directly via `OpenMappedExeConfiguration`, and passing
+the resolved string straight into the `DbContext` constructor, has no
+such timing dependency.
+
+**Verified:** full suite (`Category!=Integration`, 80 tests) still
+passes via CLI `vstest.console.exe` after this change, and the legacy
+app (`src/NerdDinner.csproj`) still builds clean — the two new
+constructor overloads are additive and don't change either class's
+existing parameterless-constructor behavior, which is all the running
+app ever uses.
+
+**Status:** Adopted, confirmed inside Visual Studio's Test Explorer —
+see DL-025 and DL-026 for the further symptoms of this same underlying
+issue that surfaced once this fix was in place, and DL-026's closing
+note for the user's full-suite confirmation.
+
+---
+
+### DL-025 — DL-024 wasn't enough: controllers under test construct their own `NerdDinnerContext` internally, unreachable from test code
+
+**Decision:** `DinnersController`, `RSVPController`, and `SearchController`
+(the three controllers with a hardcoded `private NerdDinnerContext db =
+new NerdDinnerContext();` field) now each have an additional
+constructor overload taking a `NerdDinnerContext` directly:
+
+```csharp
+private readonly NerdDinnerContext db;
+
+public DinnersController() : this(new NerdDinnerContext())
+{
+}
+
+public DinnersController(NerdDinnerContext context)
+{
+    db = context;
+}
+```
+
+The parameterless constructor is unchanged in behavior — it still builds
+a `NerdDinnerContext` the normal way and is all the running app ever
+uses. `NerdDinner.Tests`' 23 call sites that construct these controllers
+directly (`new DinnersController()`, etc.) now pass
+`new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext"))`
+explicitly through the new overload.
+
+**Context:** DL-024 fixed every place *test code itself* constructed a
+`NerdDinnerContext`/`ApplicationDbContext`, but the user's next VS Test
+Explorer run still failed — this time inside `DinnersController.Delete`
+itself (`InternalSet.Find` → `InternalContext.Initialize` →
+`No connection string named 'NerdDinnerContext'...`). Root cause: these
+controllers construct their own `db` field via a hardcoded field
+initializer, and `NerdDinner.Tests` exercises them by instantiating the
+controller class directly (the standard, well-established way to unit
+test this MVC generation — see `ControllerTestHelpers.cs`'s own doc
+comment) rather than through a live HTTP pipeline. That means the
+controller's internal context construction happens inside the *test's*
+AppDomain, not inside IIS/IIS Express where the app's own config
+resolves fine — the exact same underlying AppDomain-config mismatch
+DL-023/DL-024 diagnosed, just reachable through a code path neither of
+those fixes could see or touch.
+
+**Alternative considered:** fixing this globally via a C# 9 module
+initializer in `NerdDinner.Tests` (with a small polyfill attribute, since
+net48 doesn't ship `ModuleInitializerAttribute`) that calls
+`AppDomain.CurrentDomain.SetData("APP_CONFIG_FILE", ...)` before any
+other code in the test assembly runs — CLR module-load semantics
+guarantee this runs before anything else in the module, sidestepping the
+parallel-collection race DL-024 rejected for the same idea. Rejected in
+favor of constructor injection: no production controller code needed,
+but the fix would have been invisible/non-obvious to a future reader
+(a module initializer touching global AppDomain state isn't something
+most C# developers expect to go looking for), whereas an added
+constructor overload is a completely standard, discoverable ASP.NET MVC
+pattern. Chosen deliberately at the cost of touching three controller
+files instead of zero.
+
+**Verified:** full suite (`Category!=Integration`, 80 tests) passes via
+CLI `vstest.console.exe`, and `src/NerdDinner.csproj` rebuilds clean.
+Confirmed inside Visual Studio's Test Explorer — see DL-026's closing
+note.
+
+**Status:** Adopted, confirmed inside Visual Studio's Test Explorer.
+
+---
+
+### DL-026 — Same class of bug, third mechanism: `GeolocationService`'s static methods read `ConfigurationManager.AppSettings` directly, with no injectable seam at all
+
+**Decision:** `GeolocationService.PlaceOrZipToLatLong` and
+`.HostIpToPlaceName` (both `static`, `src/Services/GeolocationService.cs`)
+each gained an additional optional parameter
+(`geoNamesUserName`/`ipInfoDbKey`, both defaulting to `null`) that, when
+supplied, is used directly instead of the
+`ConfigurationManager.AppSettings[...]` lookup. Default behavior
+(parameter omitted) is unchanged — still the same
+`ConfigurationManager`-based lookup as before, which is all
+`SearchController` (the only production caller) ever uses. A new
+`NerdDinner.Tests/TestSupport/TestAppSettings.cs` (same shape as
+DL-024's `TestConnectionStrings`, `Assembly.CodeBase`-derived path +
+`ConfigurationManager.OpenMappedExeConfiguration`) resolves appSettings
+values from this assembly's own compiled config directly. All three
+`GeolocationServiceTests` now pass their value through explicitly.
+
+**Context:** With DL-023/024/025 all confirmed fixed, the user's next VS
+Test Explorer run reduced to exactly the two GeoNames Integration tests
+failing — `Uri.EscapeDataString(null)` inside `PlaceOrZipToLatLong`.
+Initially indistinguishable from "the GeoNames username secret just
+isn't set on this machine" (DL-013's already-documented failure mode for
+that case) — but the user had it set, and *had* previously seen these
+tests pass. Debugging confirmed the real cause directly: breaking on
+`ConfigurationManager.AppSettings` inside the running test showed its
+only key was `TestProjectRetargetTo35Allowed` — a legacy VS/MSTest test
+host config key, not anything from `NerdDinner.Tests`' own `App.config`.
+The exact same AppDomain-config mismatch as DL-023/024/025, hit through
+a third mechanism: a `static` service method with no constructor to add
+an overload to, unlike the controllers DL-025 fixed.
+
+**A real risk checked empirically before trusting it, not assumed:**
+`GeoNames:UserName`'s actual value comes from a config builder
+(`Microsoft.Configuration.ConfigurationBuilders.UserSecrets`, per
+DL-013) reading `%APPDATA%\Microsoft\UserSecrets\<id>\secrets.json` at
+runtime — the value checked into `App.config` itself is a blank
+placeholder. Whether `ConfigurationManager.OpenMappedExeConfiguration`
+(a separate, standalone configuration-loading path from the AppDomain's
+ambient `ConfigurationManager.AppSettings`) still applies that config
+builder transformation, or just returns the literal blank from the file,
+was a real open question — config builders operating on the ambient
+config system doesn't guarantee they also run for an explicitly
+memory-mapped configuration object. Verified directly rather than
+assumed: `PlaceOrZipToLatLong_ReturnsCoordinates_ForKnownValidZip`
+(which asserts `Assert.NotNull(result)` against a real GeoNames API
+call) passed via CLI `vstest.console.exe` after this change — a blank
+username would 401 and produce `null`, so this specifically proves the
+real, config-builder-supplied secret was resolved correctly, not just
+that the code compiled.
+
+**Verified:** full suite, unfiltered (83 tests, `Category=Integration`
+included) passes via CLI `vstest.console.exe`; `src/NerdDinner.csproj`
+rebuilds clean.
+
+**Status:** Adopted, confirmed inside Visual Studio's Test Explorer —
+the user ran the complete suite there directly and confirmed everything
+passes. This closes the DL-023 through DL-026 chain: what began as
+"29 failing tests, spread across everything" in VS Test Explorer, root
+caused to a single underlying issue (VS's IDE-hosted Test Explorer
+AppDomain not resolving this test assembly's own directory/config the
+way `AppDomain.CurrentDomain.BaseDirectory`/`ConfigurationManager`
+implicitly assume), surfacing through four different mechanisms
+(native DLL loading, fixture-owned `DbContext`s, controller-owned
+`DbContext`s, and a static service's `AppSettings` read) as each prior
+fix peeled back the one before it.
+
+---
+
+### DL-027 — `GeolocationService`'s DL-026 optional-parameter fix is a deliberate stopgap; proper DI belongs to M9
+
+**Decision:** `GeolocationService.PlaceOrZipToLatLong`/`.HostIpToPlaceName`'s
+optional-parameter fix (DL-026) stays as-is for the remainder of Phase 1.
+Not converting `GeolocationService` to an instance class with real
+constructor-injected configuration now, even though that would be the
+cleaner design and the user raised it as a live option.
+
+**Reasoning:** `SearchController` (the only caller of these methods) is
+already in M9's scope for a full port to the ASP.NET Core app. Real
+dependency injection (`IOptions<T>`, constructor injection via the
+built-in container) is free and idiomatic there; retrofitting an
+instance/DI shape onto a static-method class in classic ASP.NET MVC now
+would likely be redone from scratch during that port anyway. The
+controllers' constructor injection (DL-025) was different in kind — the
+minimum change needed to make permanent test infrastructure work, not a
+design upgrade — whereas this would be a design upgrade to code already
+scheduled for a rewrite.
+
+**Status:** Adopted. Revisit at M9: give `GeolocationService`'s ASP.NET
+Core replacement real constructor-injected configuration from the start,
+rather than porting forward the optional-parameter pattern.

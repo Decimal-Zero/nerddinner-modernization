@@ -158,6 +158,8 @@
     <Compile Include="Services\GeolocationServiceTests.cs" />
     <Compile Include="TestSupport\ControllerTestHelpers.cs" />
     <Compile Include="TestSupport\IdentityTestDatabase.cs" />
+    <Compile Include="TestSupport\TestAppSettings.cs" />
+    <Compile Include="TestSupport\TestConnectionStrings.cs" />
     <Compile Include="TestSupport\TestDatabase.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

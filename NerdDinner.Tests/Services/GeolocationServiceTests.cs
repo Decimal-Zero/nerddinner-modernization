@@ -1,5 +1,6 @@
 using System;
 using NerdDinner.Services;
+using NerdDinner.Tests.TestSupport;
 using Xunit;
 
 namespace NerdDinner.Tests.Services
@@ -38,7 +39,7 @@ namespace NerdDinner.Tests.Services
         [Trait("Category", "Integration")]
         public void PlaceOrZipToLatLong_ReturnsCoordinates_ForKnownValidZip()
         {
-            var result = GeolocationService.PlaceOrZipToLatLong("98101"); // Seattle
+            var result = GeolocationService.PlaceOrZipToLatLong("98101", TestAppSettings.Get("GeoNames:UserName")); // Seattle
 
             Assert.NotNull(result);
         }
@@ -52,7 +53,7 @@ namespace NerdDinner.Tests.Services
             // returning zero results is handled gracefully (returns null),
             // per the existing `if (result.Descendants("code").Any())`
             // check.
-            var result = GeolocationService.PlaceOrZipToLatLong("zzzznotarealplacezzzz");
+            var result = GeolocationService.PlaceOrZipToLatLong("zzzznotarealplacezzzz", TestAppSettings.Get("GeoNames:UserName"));
 
             Assert.Null(result);
         }
@@ -69,7 +70,7 @@ namespace NerdDinner.Tests.Services
             // ipinfodb.com call produced straight to the caller. M5 wraps
             // the external call and returns null on any failure instead,
             // matching PlaceOrZipToLatLong's existing "no match" contract.
-            var result = GeolocationService.HostIpToPlaceName("127.0.0.1");
+            var result = GeolocationService.HostIpToPlaceName("127.0.0.1", TestAppSettings.Get("ipInfoDbKey"));
 
             Assert.Null(result);
         }

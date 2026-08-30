@@ -22,6 +22,14 @@ namespace NerdDinner.Models
         {
         }
 
+        // See NerdDinnerContext(string) -- same test-only escape hatch
+        // around ConfigurationManager's ambient config resolution. The
+        // running app never uses this constructor.
+        public ApplicationDbContext(string connectionString)
+            : base(connectionString, throwIfV1Schema: false)
+        {
+        }
+
         public static ApplicationDbContext Create()
         {
             return new ApplicationDbContext();

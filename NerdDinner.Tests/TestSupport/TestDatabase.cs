@@ -23,7 +23,25 @@ namespace NerdDinner.Tests.TestSupport
             // longer auto-registered the way the old 10.50 SqlServerTypes
             // package was. Must happen before anything touches spatial
             // data below.
-            SqlServerTypes.Utilities.LoadNativeAssemblies(AppDomain.CurrentDomain.BaseDirectory);
+            //
+            // Neither AppDomain.CurrentDomain.BaseDirectory nor
+            // Assembly.Location is reliable here across every way this
+            // suite gets run. Under Visual Studio's IDE-hosted Test
+            // Explorer, BaseDirectory resolves to the TestPlatform host's
+            // own install directory, not this assembly's bin\Debug.
+            // Assembly.Location is shadow-copy-aware and, under the VSTest
+            // adapter (confirmed via CLI vstest.console.exe too, not just
+            // the IDE), resolves to a shadow-copy temp cache path -- in
+            // both cases the SqlServerTypes\x64\ subfolder doesn't exist
+            // there, so LoadLibrary fails with "module not found" even
+            // though the real file is sitting right next to this DLL.
+            // Assembly.CodeBase is a file:// URI pointing at the assembly's
+            // real, original path and isn't affected by shadow copying --
+            // confirmed directly by comparing all three under the VSTest
+            // adapter. See decision-log.md DL-023.
+            var codeBaseUri = new Uri(typeof(TestDatabaseFixture).Assembly.CodeBase);
+            var testAssemblyDirectory = System.IO.Path.GetDirectoryName(codeBaseUri.LocalPath);
+            SqlServerTypes.Utilities.LoadNativeAssemblies(testAssemblyDirectory);
 
             // Database.SetInitializer + a throwaway context access forces
             // EF to create the schema against the LocalDB connection string
@@ -34,7 +52,7 @@ namespace NerdDinner.Tests.TestSupport
             // suite should not depend on.
             Database.SetInitializer(new DropCreateDatabaseAlways<NerdDinnerContext>());
 
-            using (var db = new NerdDinnerContext())
+            using (var db = new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")))
             {
                 db.Database.Initialize(force: true);
                 Seed(db);
@@ -53,7 +71,7 @@ namespace NerdDinner.Tests.TestSupport
         /// </summary>
         public void Reset()
         {
-            using (var db = new NerdDinnerContext())
+            using (var db = new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")))
             {
                 // DbSet<T>.RemoveRange isn't available on EF 5.0 (the
                 // version this app -- and this test project's
@@ -135,7 +153,7 @@ namespace NerdDinner.Tests.TestSupport
 
         public void Dispose()
         {
-            using (var db = new NerdDinnerContext())
+            using (var db = new NerdDinnerContext(TestConnectionStrings.Get("NerdDinnerContext")))
             {
                 db.Database.Delete();
             }

@@ -20,7 +20,7 @@ namespace NerdDinner.Tests.TestSupport
         {
             Database.SetInitializer(new DropCreateDatabaseAlways<ApplicationDbContext>());
 
-            using (var db = new ApplicationDbContext())
+            using (var db = new ApplicationDbContext(TestConnectionStrings.Get("DefaultConnection")))
             {
                 db.Database.Initialize(force: true);
             }
@@ -28,7 +28,7 @@ namespace NerdDinner.Tests.TestSupport
 
         public void Dispose()
         {
-            using (var db = new ApplicationDbContext())
+            using (var db = new ApplicationDbContext(TestConnectionStrings.Get("DefaultConnection")))
             {
                 db.Database.Delete();
             }

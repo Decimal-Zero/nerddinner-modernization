@@ -17,6 +17,17 @@ namespace NerdDinner.Models
         {
         }
 
+        // Lets a caller supply a raw connection string directly, bypassing
+        // ConfigurationManager's name-based ("name=NerdDinnerContext")
+        // config lookup entirely. The running app never needs this -- it
+        // always uses the parameterless constructor above -- but
+        // NerdDinner.Tests does, to work around a VS Test Explorer AppDomain
+        // config-resolution issue unrelated to this class. See
+        // decision-log.md DL-023/DL-024.
+        public NerdDinnerContext(string connectionString) : base(connectionString)
+        {
+        }
+
         public DbSet<Dinner> Dinners { get; set; }
         public DbSet<RSVP> RSVPs { get; set; }
     }

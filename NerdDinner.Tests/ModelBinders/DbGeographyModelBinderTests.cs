@@ -23,7 +23,15 @@ namespace NerdDinner.Tests.ModelBinders
             // TestDatabaseFixture, which this class doesn't share a
             // collection with, so it isn't guaranteed to have run first
             // when these tests are executed in isolation.
-            SqlServerTypes.Utilities.LoadNativeAssemblies(AppDomain.CurrentDomain.BaseDirectory);
+            //
+            // Assembly.CodeBase, not AppDomain.CurrentDomain.BaseDirectory
+            // or Assembly.Location (both unreliable under the VSTest
+            // adapter/IDE Test Explorer) -- see the identical
+            // fix/explanation in TestDatabase.cs and decision-log.md
+            // DL-023.
+            var codeBaseUri = new Uri(typeof(DbGeographyModelBinderTests).Assembly.CodeBase);
+            var testAssemblyDirectory = System.IO.Path.GetDirectoryName(codeBaseUri.LocalPath);
+            SqlServerTypes.Utilities.LoadNativeAssemblies(testAssemblyDirectory);
         }
 
         private static object BindLocation(string postedValue)

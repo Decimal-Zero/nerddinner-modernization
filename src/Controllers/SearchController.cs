@@ -25,7 +25,18 @@ namespace NerdDinner.Controllers
 
     public class SearchController : ApiController
     {
-        private NerdDinnerContext db = new NerdDinnerContext();
+        private readonly NerdDinnerContext db;
+
+        public SearchController() : this(new NerdDinnerContext())
+        {
+        }
+
+        // See DinnersController's identical constructor for why this
+        // exists (decision-log.md DL-025). App behavior unchanged.
+        public SearchController(NerdDinnerContext context)
+        {
+            db = context;
+        }
 
         // GET api/Search?latitude=1.0&longitude=1.0
         [HttpGet]

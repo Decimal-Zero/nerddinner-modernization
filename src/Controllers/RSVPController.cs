@@ -9,7 +9,18 @@ namespace NerdDinner.Controllers
 {
     public class RSVPController : Controller
     {
-        private NerdDinnerContext db = new NerdDinnerContext();
+        private readonly NerdDinnerContext db;
+
+        public RSVPController() : this(new NerdDinnerContext())
+        {
+        }
+
+        // See DinnersController's identical constructor for why this
+        // exists (decision-log.md DL-025). App behavior unchanged.
+        public RSVPController(NerdDinnerContext context)
+        {
+            db = context;
+        }
 
         //
         // HTTP: /RSVP/Register/1
